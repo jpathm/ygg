@@ -149,7 +149,7 @@ ygg skill uninstall
 
 Ygg uses named tmux windows or Zellij tabs when invoked inside a supported multiplexer. Otherwise, it spawns subshells in worktree directories; when you're done, `exit` to return to where you started.
 
-Inside a ygg shell, `ygg switch` changes directory directly instead of nesting shells.
+Inside a ygg shell, `ygg new` and `ygg switch` emit a `cd` instruction before multiplexer detection, so the wrapper changes directory directly instead of nesting shells or opening a workspace.
 
 ## Requirements
 

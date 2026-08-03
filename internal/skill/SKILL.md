@@ -33,7 +33,7 @@ ygg clean --force    # Clean without confirmation prompts
 - Tmux and Zellij are detected via `$TMUX`/`$ZELLIJ`: ygg opens or focuses a named `<repo>/<worktree>` workspace instead of nesting a shell
 - Tmux takes precedence when both variables are set, and operates only in the current tmux session
 - `ygg remove` and `ygg clean` close matching multiplexer workspaces after removing worktrees
-- `ygg switch` inside an existing ygg shell emits a `cd` command for the wrapper to evaluate
+- Inside an existing ygg shell, `ygg new` and `ygg switch` emit a `cd` command for the wrapper to evaluate before multiplexer detection
 - `ygg remove` without a name removes the current worktree (if inside one) and returns you to main
 
 ## When Helping the User

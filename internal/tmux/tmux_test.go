@@ -89,19 +89,19 @@ func TestFindWindowID(t *testing.T) {
 	}{
 		{
 			name:      "exact match",
-			output:    "%1\tother\n%2\tygg/feature\n%3\tygg/feature-extra\n",
-			wantID:    "%2",
+			output:    "@1\tother\n@2\tygg/feature\n@3\tygg/feature-extra\n",
+			wantID:    "@2",
 			wantFound: true,
 		},
-		{name: "missing", output: "%1\tother\n"},
+		{name: "missing", output: "@1\tother\n"},
 		{
 			name:      "duplicate",
-			output:    "%1\tygg/feature\n%2\tygg/feature\n",
+			output:    "@1\tygg/feature\n@2\tygg/feature\n",
 			wantError: "multiple tmux windows named \"ygg/feature\"",
 		},
 		{
 			name:      "malformed record",
-			output:    "%1-without-a-tab\n",
+			output:    "@1-without-a-tab\n",
 			wantError: "unexpected tmux window record",
 		},
 		{
@@ -138,7 +138,7 @@ func TestFindWindowID(t *testing.T) {
 }
 
 func TestOpenWindowSelectsExistingWindowByID(t *testing.T) {
-	fake := &fakeRunner{output: []byte("%7\tygg/feature\n")}
+	fake := &fakeRunner{output: []byte("@7\tygg/feature\n")}
 	useRunner(t, fake)
 
 	if err := OpenWindow("/repo/.worktrees/feature", "ygg", "feature"); err != nil {
@@ -147,7 +147,7 @@ func TestOpenWindowSelectsExistingWindowByID(t *testing.T) {
 
 	assertCalls(t, fake.calls, []commandCall{
 		{method: "output", name: "tmux", args: []string{"list-windows", "-F", "#{window_id}\t#{window_name}"}},
-		{method: "run", name: "tmux", args: []string{"select-window", "-t", "%7"}},
+		{method: "run", name: "tmux", args: []string{"select-window", "-t", "@7"}},
 	})
 }
 
@@ -171,7 +171,7 @@ func TestOpenWindowReportsOperationFailure(t *testing.T) {
 		output    string
 		wantError string
 	}{
-		{name: "select", output: "%7\tygg/feature\n", wantError: "failed to select tmux window \"ygg/feature\""},
+		{name: "select", output: "@7\tygg/feature\n", wantError: "failed to select tmux window \"ygg/feature\""},
 		{name: "create", wantError: "failed to create tmux window \"ygg/feature\""},
 	}
 
@@ -189,7 +189,7 @@ func TestOpenWindowReportsOperationFailure(t *testing.T) {
 }
 
 func TestCloseWindowKillsExistingWindowByID(t *testing.T) {
-	fake := &fakeRunner{output: []byte("%7\tygg/feature\n")}
+	fake := &fakeRunner{output: []byte("@7\tygg/feature\n")}
 	useRunner(t, fake)
 
 	if err := CloseWindow("ygg", "feature"); err != nil {
@@ -198,12 +198,12 @@ func TestCloseWindowKillsExistingWindowByID(t *testing.T) {
 
 	assertCalls(t, fake.calls, []commandCall{
 		{method: "output", name: "tmux", args: []string{"list-windows", "-F", "#{window_id}\t#{window_name}"}},
-		{method: "run", name: "tmux", args: []string{"kill-window", "-t", "%7"}},
+		{method: "run", name: "tmux", args: []string{"kill-window", "-t", "@7"}},
 	})
 }
 
 func TestCloseWindowMissingIsNoOp(t *testing.T) {
-	fake := &fakeRunner{output: []byte("%1\tother\n")}
+	fake := &fakeRunner{output: []byte("@1\tother\n")}
 	useRunner(t, fake)
 
 	if err := CloseWindow("ygg", "feature"); err != nil {
@@ -218,7 +218,7 @@ func TestCloseWindowMissingIsNoOp(t *testing.T) {
 }
 
 func TestCloseWindowRejectsDuplicateNames(t *testing.T) {
-	fake := &fakeRunner{output: []byte("%7\tygg/feature\n%8\tygg/feature\n")}
+	fake := &fakeRunner{output: []byte("@7\tygg/feature\n@8\tygg/feature\n")}
 	useRunner(t, fake)
 
 	err := CloseWindow("ygg", "feature")
@@ -232,7 +232,7 @@ func TestCloseWindowRejectsDuplicateNames(t *testing.T) {
 
 func TestCloseWindowReportsKillFailure(t *testing.T) {
 	fake := &fakeRunner{
-		output: []byte("%7\tygg/feature\n"),
+		output: []byte("@7\tygg/feature\n"),
 		runErr: errors.New("kill failed"),
 	}
 	useRunner(t, fake)
