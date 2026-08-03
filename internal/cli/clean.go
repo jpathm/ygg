@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/joch/ygg/internal/multiplexer"
 	"github.com/joch/ygg/internal/worktree"
-	"github.com/joch/ygg/internal/zellij"
 	"github.com/spf13/cobra"
 )
 
@@ -116,16 +116,14 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	inZellij := zellij.InZellij()
+	backend := multiplexer.Detect()
 	for _, wt := range toRemove {
 		if err := wm.Remove(wt.Name); err != nil {
 			errorMsg("Failed to remove %s: %v", wt.Name, err)
 		} else {
 			success("Removed %s", wt.Name)
-			if inZellij {
-				if err := zellij.CloseTab(wm.RepoName(), wt.Name); err != nil {
-					info("Could not close zellij tab: %v", err)
-				}
+			if err := closeWorkspace(backend, wm.RepoName(), wt.Name); err != nil {
+				info("Could not close %s workspace: %v", backend.Name(), err)
 			}
 		}
 	}

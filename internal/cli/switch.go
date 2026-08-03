@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/joch/ygg/internal/shell"
 	"github.com/joch/ygg/internal/worktree"
-	"github.com/joch/ygg/internal/zellij"
 	"github.com/spf13/cobra"
 )
 
@@ -15,8 +13,9 @@ var switchCmd = &cobra.Command{
 	Short: "Switch to a worktree",
 	Long: `Switch to an existing worktree by name.
 
-This spawns a subshell in the worktree directory.
-Exit the subshell to return to your original directory.`,
+Inside tmux or Zellij, this focuses an existing named workspace or creates one.
+Otherwise, it spawns a subshell in the worktree directory; exit that shell to
+return to your original directory.`,
 	Args:              cobra.ExactArgs(1),
 	Aliases:           []string{"sw"},
 	RunE:              runSwitch,
@@ -53,16 +52,5 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Use zellij tab if inside zellij, otherwise spawn a subshell
-	if zellij.InZellij() {
-		info("Switching to zellij tab...")
-		if err := zellij.OpenTab(wt.Path, wm.RepoName(), wt.Name); err != nil {
-			info("Zellij failed, falling back to subshell: %v", err)
-			return shell.Spawn(wt.Path, wt.Name)
-		}
-		return nil
-	}
-
-	info("Entering %s (exit to return)...", wt.Name)
-	return shell.Spawn(wt.Path, wt.Name)
+	return enterWorktree(wt.Path, wm.RepoName(), wt.Name)
 }
