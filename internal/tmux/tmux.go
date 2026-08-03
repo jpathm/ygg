@@ -62,3 +62,40 @@ func findWindowID(name string) (string, bool, error) {
 
 	return match, match != "", nil
 }
+
+// OpenWindow focuses an existing exact match or creates a tmux window in dir.
+func OpenWindow(dir, repoName, worktreeName string) error {
+	name := WindowName(repoName, worktreeName)
+	id, found, err := findWindowID(name)
+	if err != nil {
+		return err
+	}
+	if found {
+		if err := commands.Run("tmux", "select-window", "-t", id); err != nil {
+			return fmt.Errorf("failed to select tmux window %q: %w", name, err)
+		}
+		return nil
+	}
+
+	if err := commands.Run("tmux", "new-window", "-n", name, "-c", dir); err != nil {
+		return fmt.Errorf("failed to create tmux window %q: %w", name, err)
+	}
+	return nil
+}
+
+// CloseWindow closes a unique exact-matching tmux window, if one exists.
+func CloseWindow(repoName, worktreeName string) error {
+	name := WindowName(repoName, worktreeName)
+	id, found, err := findWindowID(name)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+
+	if err := commands.Run("tmux", "kill-window", "-t", id); err != nil {
+		return fmt.Errorf("failed to close tmux window %q: %w", name, err)
+	}
+	return nil
+}
