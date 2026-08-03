@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/joch/ygg/internal/multiplexer"
 	"github.com/joch/ygg/internal/shell"
 	"github.com/joch/ygg/internal/worktree"
-	"github.com/joch/ygg/internal/zellij"
 	"github.com/spf13/cobra"
 )
 
@@ -111,11 +111,9 @@ func runRemove(cmd *cobra.Command, args []string) error {
 
 	success("Removed worktree: %s", worktreeName)
 
-	// Close matching zellij tab if inside zellij
-	if zellij.InZellij() {
-		if err := zellij.CloseTab(wm.RepoName(), worktreeName); err != nil {
-			info("Could not close zellij tab: %v", err)
-		}
+	backend := multiplexer.Detect()
+	if err := closeWorkspace(backend, wm.RepoName(), worktreeName); err != nil {
+		info("Could not close %s workspace: %v", backend.Name(), err)
 	}
 
 	if needsCd {
