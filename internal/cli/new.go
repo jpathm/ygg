@@ -18,9 +18,11 @@ This will:
 2. Create a new worktree with a branch named <name>, based on the latest
    origin/<default-branch> (falling back to the local default branch when
    there is no remote)
-3. Enter a subshell in the new worktree directory
+3. Open the worktree in the active tmux/Zellij multiplexer, or enter a
+   subshell when no multiplexer is active
 
-Exit the subshell to return to your original directory.`,
+Exit the subshell to return to your original directory when ygg is not using
+a multiplexer workspace.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNew,
 }

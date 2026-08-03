@@ -39,7 +39,7 @@ ygg new my-feature
 This will:
 1. Fetch latest from origin
 2. Create a new worktree with branch `my-feature` based on the default branch
-3. Enter a subshell in the new worktree directory
+3. Open the worktree in the active tmux/Zellij multiplexer, or enter a subshell
 
 Worktrees are created at `.worktrees/<feature-name>` inside the repository root.
 
@@ -57,7 +57,7 @@ Shows all worktrees. Current worktree is marked with `*`, modified ones show `[m
 ygg switch my-feature
 ```
 
-Enters a subshell in the specified worktree.
+Focuses or creates a named tmux/Zellij workspace when a supported multiplexer is active. Otherwise, enters a subshell in the specified worktree.
 
 ### Remove a worktree
 
@@ -113,14 +113,16 @@ When inside a ygg shell, `$YGG_WORKTREE` is set to the current worktree name. Ad
 PS1='${YGG_WORKTREE:+[$YGG_WORKTREE] }'$PS1
 ```
 
-## Zellij Integration
+## Terminal Multiplexer Integration
 
-When running inside a [zellij](https://zellij.dev/) session, ygg automatically creates named tabs instead of spawning subshells. No configuration needed — it detects zellij via the `ZELLIJ` environment variable.
+When running inside [tmux](https://github.com/tmux/tmux/wiki) or [Zellij](https://zellij.dev/), ygg automatically uses a named window/tab instead of spawning a subshell. No configuration is needed; ygg detects tmux via `$TMUX` and Zellij via `$ZELLIJ`.
 
-- `ygg new my-feature` creates a tab named `<repo>/my-feature` with the worktree as the working directory
-- `ygg switch my-feature` focuses the existing tab, or creates one if it doesn't exist
+- `ygg new my-feature` creates a workspace named `<repo>/my-feature` rooted at the new worktree
+- `ygg switch my-feature` focuses the existing workspace, or creates one if it does not exist
+- `ygg remove` and `ygg clean` close matching workspaces after successful worktree removal
+- Tmux operations are limited to the current session
 
-If zellij commands fail for any reason, ygg falls back to the normal subshell behavior.
+If both environments are present, tmux takes precedence. If opening a workspace fails, ygg reports the error and falls back to the normal subshell behavior. Cleanup failures are reported but do not undo worktree removal.
 
 ## Agent Skills
 
@@ -145,7 +147,7 @@ ygg skill uninstall
 
 ## How it works
 
-ygg spawns subshells in worktree directories. When you're done, `exit` to return to where you started.
+Ygg uses named tmux windows or Zellij tabs when invoked inside a supported multiplexer. Otherwise, it spawns subshells in worktree directories; when you're done, `exit` to return to where you started.
 
 Inside a ygg shell, `ygg switch` changes directory directly instead of nesting shells.
 

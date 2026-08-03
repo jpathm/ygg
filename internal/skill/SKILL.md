@@ -10,7 +10,7 @@ ygg manages git worktrees stored in `.worktrees/` inside the repo root. Each wor
 ## Commands
 
 ```bash
-ygg new <name>       # Create worktree + branch from default branch, open subshell/Zellij tab
+ygg new <name>       # Create worktree + branch, then open a multiplexer workspace/subshell
 ygg list             # List all worktrees (* = current, [modified] = uncommitted changes)
 ygg switch <name>    # Switch to an existing worktree (alias: sw)
 ygg remove [name]    # Remove a worktree; omit name when inside the worktree (alias: rm)
@@ -30,7 +30,9 @@ ygg clean --force    # Clean without confirmation prompts
 
 - `ygg new` fetches latest from origin, bases the branch on `main`/`master`, and copies untracked files from the main worktree
 - Sets `$YGG_WORKTREE` env var inside the shell for prompt integration
-- Zellij detected via `$ZELLIJ`: opens a named tab instead of a nested subshell
+- Tmux and Zellij are detected via `$TMUX`/`$ZELLIJ`: ygg opens or focuses a named `<repo>/<worktree>` workspace instead of nesting a shell
+- Tmux takes precedence when both variables are set, and operates only in the current tmux session
+- `ygg remove` and `ygg clean` close matching multiplexer workspaces after removing worktrees
 - `ygg switch` inside an existing ygg shell emits a `cd` command for the wrapper to evaluate
 - `ygg remove` without a name removes the current worktree (if inside one) and returns you to main
 
