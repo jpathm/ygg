@@ -33,10 +33,10 @@ Replace `#W` in `window-status-format` and `window-status-current-format` with a
 Use this extended regular expression and replace a match with its first capture group:
 
 ```text
-^([^/]*/([^-]*-){5}[^-]*)-.*$
+^([^/]*/[^-]*-[^-]*-[^-]*-[^-]*-[^-]*-[^-]*)-.*$
 ```
 
-The extended regular expression captures the repository name, slash, and worktree text through its fifth hyphen. If a sixth hyphen exists, that hyphen and the remaining suffix are removed from the rendered value. If the expression does not match, tmux leaves the value unchanged.
+The extended regular expression captures the repository name, slash, and worktree text through its fifth hyphen. The five segments are written out because an interval expression such as `{5}` conflicts with tmux's format delimiters. If a sixth hyphen exists, that hyphen and the remaining suffix are removed from the rendered value. If the expression does not match, tmux leaves the value unchanged.
 
 This display-only approach avoids collisions. Two worktrees whose names share the same visible prefix may look identical in the status bar, but their complete internal names remain distinct and ygg's exact-name lookup continues to operate correctly.
 
