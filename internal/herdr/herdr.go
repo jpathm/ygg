@@ -126,7 +126,7 @@ func CloseWorkspace(workspaceID string) error {
 	if err := json.Unmarshal(output, &response); err != nil {
 		return fmt.Errorf("failed to parse Herdr workspace close response for %q: %w", workspaceID, err)
 	}
-	if response.Result.Type != "workspace_closed" {
+	if response.Result.Type != "ok" {
 		return fmt.Errorf("unexpected Herdr workspace close response type %q for %q", response.Result.Type, workspaceID)
 	}
 	return nil

@@ -169,8 +169,8 @@ func TestPrepareCloseEdgeCases(t *testing.T) {
 	}
 }
 
-func TestCloseWorkspaceUsesOpaqueID(t *testing.T) {
-	fake := &fakeRunner{results: []commandResult{{output: `{"result":{"type":"workspace_closed"}}`}}}
+func TestCloseWorkspaceAcceptsOKResponse(t *testing.T) {
+	fake := &fakeRunner{results: []commandResult{{output: `{"id":"cli:workspace:close","result":{"type":"ok"}}`}}}
 	useRunner(t, fake)
 	if err := CloseWorkspace("w5"); err != nil {
 		t.Fatalf("CloseWorkspace() error = %v", err)

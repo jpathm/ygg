@@ -209,6 +209,31 @@ func TestIsBranchMergedUsesResolvedBaseForStaleLocalMain(t *testing.T) {
 	}
 }
 
+func TestMergedBranchesReturnsCanonicalNameForLinkedWorktree(t *testing.T) {
+	tmp := t.TempDir()
+	repo := filepath.Join(tmp, "repo")
+	linked := filepath.Join(tmp, "clean-me")
+
+	runGit(t, tmp, "init", "-q", "--initial-branch=main", repo)
+	runGit(t, repo, "config", "user.email", "test@test.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "commit", "-q", "--allow-empty", "-m", "initial")
+	runGit(t, repo, "worktree", "add", "-q", "-b", "clean-me", linked)
+
+	wm, err := NewManager(repo)
+	if err != nil {
+		t.Fatalf("NewManager failed: %v", err)
+	}
+
+	merged, err := wm.MergedBranches("main")
+	if err != nil {
+		t.Fatalf("MergedBranches failed: %v", err)
+	}
+	if len(merged) != 1 || merged[0] != "clean-me" {
+		t.Fatalf("MergedBranches(main) = %q, want [clean-me]", merged)
+	}
+}
+
 // TestCreateUsesLocalWhenAheadOfOrigin verifies that when the local default
 // branch has commits not yet on origin (committed directly without pushing, or
 // fetch failed offline), the new worktree includes them rather than silently
