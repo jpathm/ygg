@@ -104,7 +104,7 @@ func builtInBackends() []Backend {
 			},
 		},
 		functionBackend{
-			name:     "Zellij",
+			name:     "zellij",
 			activeFn: zellij.InZellij,
 			openFn: func(target Target) error {
 				return zellij.OpenTab(target.Path, target.RepoName, target.WorktreeName)

@@ -37,7 +37,7 @@ func TestDetect(t *testing.T) {
 	}{
 		{name: "Herdr only", herdr: "1", want: "Herdr"},
 		{name: "tmux only", tmux: "set", want: "tmux"},
-		{name: "Zellij only", zellij: "set", want: "Zellij"},
+		{name: "Zellij only", zellij: "set", want: "zellij"},
 		{name: "Herdr wins all markers", herdr: "1", tmux: "set", zellij: "set", want: "Herdr"},
 		{name: "tmux wins nested Zellij", tmux: "set", zellij: "set", want: "tmux"},
 		{name: "noncanonical Herdr ignored", herdr: "true", tmux: "set", want: "tmux"},
