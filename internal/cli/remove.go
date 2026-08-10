@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/joch/ygg/internal/multiplexer"
-	"github.com/joch/ygg/internal/shell"
 	"github.com/joch/ygg/internal/worktree"
 	"github.com/spf13/cobra"
 )
@@ -127,17 +126,7 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	if needsCd {
-		mainPath := wm.RepoPath()
-		// Change to main repo before spawning shell — the worktree dir no longer exists
-		if err := os.Chdir(mainPath); err != nil {
-			return fmt.Errorf("failed to change to main repo: %w", err)
-		}
-		if InYggShell() {
-			fmt.Printf("cd %s\n", mainPath)
-			return nil
-		}
-		info("Returning to main...")
-		return shell.Spawn(mainPath, "main")
+		return returnToPrimary(wm.RepoPath())
 	}
 
 	return nil

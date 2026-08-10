@@ -116,8 +116,13 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	current, _ := wm.Current()
+	toRemove = withCurrentWorktreeLast(toRemove, current)
+
 	backend := multiplexer.Detect()
+	needsReturnToPrimary := false
 	for _, wt := range toRemove {
+		isCurrent := current != nil && current.Path == wt.Path
 		result := removeWithWorkspace(
 			backend,
 			targetFor(wt, wm.RepoName()),
@@ -134,7 +139,33 @@ func runClean(cmd *cobra.Command, args []string) error {
 		if result.CloseError != nil {
 			info("Could not close workspace for %s: %v", wt.Name, result.CloseError)
 		}
+		if isCurrent && !result.WorkspaceHandled {
+			needsReturnToPrimary = true
+		}
 	}
 
+	if needsReturnToPrimary {
+		return returnToPrimary(wm.RepoPath())
+	}
 	return nil
+}
+
+func withCurrentWorktreeLast(worktrees []*worktree.Worktree, current *worktree.Worktree) []*worktree.Worktree {
+	if current == nil {
+		return worktrees
+	}
+
+	ordered := make([]*worktree.Worktree, 0, len(worktrees))
+	var currentCandidate *worktree.Worktree
+	for _, wt := range worktrees {
+		if wt.Path == current.Path {
+			currentCandidate = wt
+			continue
+		}
+		ordered = append(ordered, wt)
+	}
+	if currentCandidate == nil {
+		return worktrees
+	}
+	return append(ordered, currentCandidate)
 }

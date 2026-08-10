@@ -149,6 +149,9 @@ func TestPrepareCloseEdgeCases(t *testing.T) {
 		{name: "command", output: "socket unavailable", commandErr: errors.New("exit 1"), wantError: "socket unavailable"},
 		{name: "malformed JSON", output: "not-json", wantError: "failed to parse"},
 		{name: "wrong type", output: `{"result":{"type":"workspace_info"}}`, wantError: "workspace_info"},
+		{name: "missing workspaces", output: `{"result":{"type":"workspace_list"}}`, wantError: "workspaces"},
+		{name: "null workspaces", output: `{"result":{"type":"workspace_list","workspaces":null}}`, wantError: "workspaces"},
+		{name: "missing checkout path", output: `{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"w5","worktree":{}}]}}`, wantError: "checkout_path"},
 		{name: "missing ID", output: `{"result":{"type":"workspace_list","workspaces":[{"worktree":{"checkout_path":"/repo/wt"}}]}}`, wantError: "no workspace ID"},
 	}
 	for _, tt := range tests {
@@ -166,6 +169,24 @@ func TestPrepareCloseEdgeCases(t *testing.T) {
 				t.Fatalf("PrepareClose() = (%q, %v, %v)", id, found, err)
 			}
 		})
+	}
+}
+
+func TestPrepareCloseAllowsUnknownWorkspaceListFields(t *testing.T) {
+	fake := &fakeRunner{results: []commandResult{{output: `{
+		"future_envelope_field":true,
+		"result":{"type":"workspace_list","future_result_field":42,"workspaces":[
+			{"workspace_id":"w5","future_workspace_field":"value","worktree":{"checkout_path":"/repo/wt","future_worktree_field":[]}}
+		]}
+	}`}}}
+	useRunner(t, fake)
+
+	id, found, err := PrepareClose("/repo/wt")
+	if err != nil {
+		t.Fatalf("PrepareClose() error = %v", err)
+	}
+	if id != "w5" || !found {
+		t.Fatalf("PrepareClose() = (%q, %v), want (%q, true)", id, found, "w5")
 	}
 }
 

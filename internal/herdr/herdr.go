@@ -35,9 +35,9 @@ type responseEnvelope struct {
 }
 
 type responseResult struct {
-	Type       string          `json:"type"`
-	Workspace  workspaceInfo   `json:"workspace"`
-	Workspaces []workspaceInfo `json:"workspaces"`
+	Type       string           `json:"type"`
+	Workspace  workspaceInfo    `json:"workspace"`
+	Workspaces *[]workspaceInfo `json:"workspaces"`
 }
 
 type workspaceInfo struct {
@@ -46,7 +46,7 @@ type workspaceInfo struct {
 }
 
 type workspaceWorktree struct {
-	CheckoutPath string `json:"checkout_path"`
+	CheckoutPath *string `json:"checkout_path"`
 }
 
 func OpenWorkspace(path, branch, worktreeName string) error {
@@ -96,10 +96,18 @@ func PrepareClose(path string) (string, bool, error) {
 	if response.Result.Type != "workspace_list" {
 		return "", false, fmt.Errorf("unexpected Herdr workspace list response type %q", response.Result.Type)
 	}
+	if response.Result.Workspaces == nil {
+		return "", false, fmt.Errorf("Herdr workspace list response for %q has missing or null required field %q", targetPath, "workspaces")
+	}
 	var match string
-	for _, workspace := range response.Result.Workspaces {
-		if workspace.Worktree == nil ||
-			filepath.Clean(workspace.Worktree.CheckoutPath) != targetPath {
+	for _, workspace := range *response.Result.Workspaces {
+		if workspace.Worktree == nil {
+			continue
+		}
+		if workspace.Worktree.CheckoutPath == nil || *workspace.Worktree.CheckoutPath == "" {
+			return "", false, fmt.Errorf("Herdr workspace %q has incomplete worktree provenance: missing or empty %q", workspace.WorkspaceID, "checkout_path")
+		}
+		if filepath.Clean(*workspace.Worktree.CheckoutPath) != targetPath {
 			continue
 		}
 		if workspace.WorkspaceID == "" {

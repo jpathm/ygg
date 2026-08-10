@@ -1,6 +1,8 @@
 package multiplexer
 
 import (
+	"os"
+
 	"github.com/joch/ygg/internal/herdr"
 	"github.com/joch/ygg/internal/tmux"
 	"github.com/joch/ygg/internal/zellij"
@@ -86,7 +88,8 @@ func builtInBackends() []Backend {
 				if !found {
 					return ClosePlan{}, nil
 				}
-				return NewClosePlan(true, func() error {
+				callerWorkspaceID := os.Getenv("HERDR_WORKSPACE_ID")
+				return NewClosePlan(workspaceID == callerWorkspaceID, func() error {
 					return herdr.CloseWorkspace(workspaceID)
 				}), nil
 			},

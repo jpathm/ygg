@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/joch/ygg/internal/multiplexer"
 	"github.com/joch/ygg/internal/shell"
@@ -72,4 +73,18 @@ func removeWithWorkspace(
 	result.CloseError = plan.Execute()
 	result.WorkspaceHandled = result.CloseError == nil && plan.Matched()
 	return result
+}
+
+func returnToPrimary(mainPath string) error {
+	// Change directory before starting fallback navigation because the caller's
+	// worktree no longer exists.
+	if err := os.Chdir(mainPath); err != nil {
+		return fmt.Errorf("failed to change to main repo: %w", err)
+	}
+	if InYggShell() {
+		fmt.Printf("cd %s\n", mainPath)
+		return nil
+	}
+	info("Returning to main...")
+	return shell.Spawn(mainPath, "main")
 }
