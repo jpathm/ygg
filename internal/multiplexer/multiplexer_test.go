@@ -6,6 +6,31 @@ import (
 	"testing"
 )
 
+func TestClosePlan(t *testing.T) {
+	wantErr := errors.New("close failed")
+	called := false
+	plan := NewClosePlan(true, func() error { called = true; return wantErr })
+	if !plan.Matched() {
+		t.Fatal("Matched() = false, want true")
+	}
+	if err := plan.Execute(); !errors.Is(err, wantErr) {
+		t.Fatalf("Execute() error = %v, want %v", err, wantErr)
+	}
+	if !called {
+		t.Fatal("prepared close function was not called")
+	}
+}
+
+func TestZeroClosePlanIsNoOp(t *testing.T) {
+	var plan ClosePlan
+	if plan.Matched() {
+		t.Fatal("zero ClosePlan matched unexpectedly")
+	}
+	if err := plan.Execute(); err != nil {
+		t.Fatalf("zero ClosePlan Execute() error = %v", err)
+	}
+}
+
 func TestDetect(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -47,8 +72,10 @@ func TestFunctionBackendDelegatesTarget(t *testing.T) {
 	var got Target
 	backend := functionBackend{
 		name: "test", activeFn: func() bool { return true },
-		openFn:  func(target Target) error { got = target; return wantErr },
-		closeFn: func(string, string) error { return nil },
+		openFn: func(target Target) error { got = target; return wantErr },
+		prepareCloseFn: func(Target) (ClosePlan, error) {
+			return ClosePlan{}, nil
+		},
 	}
 	if err := backend.Open(want); !errors.Is(err, wantErr) {
 		t.Fatalf("Open() error = %v, want %v", err, wantErr)

@@ -13,18 +13,44 @@ type Target struct {
 	Branch       string
 }
 
+// ClosePlan captures a workspace close operation prepared before its
+// associated worktree is removed.
+type ClosePlan struct {
+	matched bool
+	execute func() error
+}
+
+// NewClosePlan creates a workspace close plan.
+func NewClosePlan(matched bool, execute func() error) ClosePlan {
+	return ClosePlan{matched: matched, execute: execute}
+}
+
+// Matched reports whether preparation found a workspace that can handle the
+// caller's return-to-primary behavior.
+func (p ClosePlan) Matched() bool {
+	return p.matched
+}
+
+// Execute runs the prepared close operation. The zero plan is a no-op.
+func (p ClosePlan) Execute() error {
+	if p.execute == nil {
+		return nil
+	}
+	return p.execute()
+}
+
 type Backend interface {
 	Name() string
 	Active() bool
 	Open(Target) error
-	Close(repoName, worktreeName string) error
+	PrepareClose(Target) (ClosePlan, error)
 }
 
 type functionBackend struct {
-	name     string
-	activeFn func() bool
-	openFn   func(Target) error
-	closeFn  func(string, string) error
+	name           string
+	activeFn       func() bool
+	openFn         func(Target) error
+	prepareCloseFn func(Target) (ClosePlan, error)
 }
 
 func (b functionBackend) Name() string {
@@ -39,8 +65,8 @@ func (b functionBackend) Open(target Target) error {
 	return b.openFn(target)
 }
 
-func (b functionBackend) Close(repoName, worktreeName string) error {
-	return b.closeFn(repoName, worktreeName)
+func (b functionBackend) PrepareClose(target Target) (ClosePlan, error) {
+	return b.prepareCloseFn(target)
 }
 
 func builtInBackends() []Backend {
@@ -51,7 +77,11 @@ func builtInBackends() []Backend {
 			openFn: func(target Target) error {
 				return tmux.OpenWindow(target.Path, target.RepoName, target.WorktreeName)
 			},
-			closeFn: tmux.CloseWindow,
+			prepareCloseFn: func(target Target) (ClosePlan, error) {
+				return NewClosePlan(false, func() error {
+					return tmux.CloseWindow(target.RepoName, target.WorktreeName)
+				}), nil
+			},
 		},
 		functionBackend{
 			name:     "zellij",
@@ -59,7 +89,11 @@ func builtInBackends() []Backend {
 			openFn: func(target Target) error {
 				return zellij.OpenTab(target.Path, target.RepoName, target.WorktreeName)
 			},
-			closeFn: zellij.CloseTab,
+			prepareCloseFn: func(target Target) (ClosePlan, error) {
+				return NewClosePlan(false, func() error {
+					return zellij.CloseTab(target.RepoName, target.WorktreeName)
+				}), nil
+			},
 		},
 	}
 }

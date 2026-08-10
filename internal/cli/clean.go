@@ -118,13 +118,21 @@ func runClean(cmd *cobra.Command, args []string) error {
 
 	backend := multiplexer.Detect()
 	for _, wt := range toRemove {
-		if err := wm.Remove(wt.Name); err != nil {
-			errorMsg("Failed to remove %s: %v", wt.Name, err)
-		} else {
-			success("Removed %s", wt.Name)
-			if err := closeWorkspace(backend, wm.RepoName(), wt.Name); err != nil {
-				info("Could not close %s workspace: %v", backend.Name(), err)
-			}
+		result := removeWithWorkspace(
+			backend,
+			targetFor(wt, wm.RepoName()),
+			func() error { return wm.Remove(wt.Name) },
+		)
+		if result.PrepareError != nil {
+			info("Could not prepare workspace close for %s: %v", wt.Name, result.PrepareError)
+		}
+		if result.RemoveError != nil {
+			errorMsg("Failed to remove %s: %v", wt.Name, result.RemoveError)
+			continue
+		}
+		success("Removed %s", wt.Name)
+		if result.CloseError != nil {
+			info("Could not close workspace for %s: %v", wt.Name, result.CloseError)
 		}
 	}
 

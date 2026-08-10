@@ -37,9 +37,28 @@ func enterWorktreeWithSpawner(
 	return spawn(target.Path, target.WorktreeName)
 }
 
-func closeWorkspace(backend multiplexer.Backend, repoName, worktreeName string) error {
-	if backend == nil {
-		return nil
+type workspaceRemovalResult struct {
+	WorkspaceHandled bool
+	PrepareError     error
+	RemoveError      error
+	CloseError       error
+}
+
+func removeWithWorkspace(
+	backend multiplexer.Backend,
+	target multiplexer.Target,
+	remove func() error,
+) workspaceRemovalResult {
+	var result workspaceRemovalResult
+	var plan multiplexer.ClosePlan
+	if backend != nil {
+		plan, result.PrepareError = backend.PrepareClose(target)
 	}
-	return backend.Close(repoName, worktreeName)
+	result.RemoveError = remove()
+	if result.RemoveError != nil || result.PrepareError != nil {
+		return result
+	}
+	result.CloseError = plan.Execute()
+	result.WorkspaceHandled = result.CloseError == nil && plan.Matched()
+	return result
 }
