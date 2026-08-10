@@ -19,6 +19,28 @@ type fakeMultiplexer struct {
 	order         *[]string
 }
 
+func TestUseYggShell(t *testing.T) {
+	tests := []struct {
+		name, yggShell string
+		backend        multiplexer.Backend
+		want           bool
+	}{
+		{name: "plain", yggShell: "1", want: true},
+		{name: "tmux", yggShell: "1", backend: &fakeMultiplexer{name: "tmux"}, want: true},
+		{name: "Zellij", yggShell: "1", backend: &fakeMultiplexer{name: "Zellij"}, want: true},
+		{name: "Herdr override", yggShell: "1", backend: &fakeMultiplexer{name: "Herdr"}, want: false},
+		{name: "not ygg shell", backend: &fakeMultiplexer{name: "Herdr"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("YGG_SHELL", tt.yggShell)
+			if got := useYggShell(tt.backend); got != tt.want {
+				t.Fatalf("useYggShell() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTargetForPreservesFullBranch(t *testing.T) {
 	wt := &worktree.Worktree{
 		Path: "/repo/.worktrees/feat/auth", Name: "auth", Branch: "feat/auth",

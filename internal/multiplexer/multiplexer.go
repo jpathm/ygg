@@ -1,6 +1,7 @@
 package multiplexer
 
 import (
+	"github.com/joch/ygg/internal/herdr"
 	"github.com/joch/ygg/internal/tmux"
 	"github.com/joch/ygg/internal/zellij"
 )
@@ -72,6 +73,25 @@ func (b functionBackend) PrepareClose(target Target) (ClosePlan, error) {
 func builtInBackends() []Backend {
 	return []Backend{
 		functionBackend{
+			name:     "Herdr",
+			activeFn: herdr.InHerdr,
+			openFn: func(target Target) error {
+				return herdr.OpenWorkspace(target.Path, target.Branch, target.WorktreeName)
+			},
+			prepareCloseFn: func(target Target) (ClosePlan, error) {
+				workspaceID, found, err := herdr.PrepareClose(target.Path)
+				if err != nil {
+					return ClosePlan{}, err
+				}
+				if !found {
+					return ClosePlan{}, nil
+				}
+				return NewClosePlan(true, func() error {
+					return herdr.CloseWorkspace(workspaceID)
+				}), nil
+			},
+		},
+		functionBackend{
 			name:     "tmux",
 			activeFn: tmux.InTmux,
 			openFn: func(target Target) error {
@@ -84,7 +104,7 @@ func builtInBackends() []Backend {
 			},
 		},
 		functionBackend{
-			name:     "zellij",
+			name:     "Zellij",
 			activeFn: zellij.InZellij,
 			openFn: func(target Target) error {
 				return zellij.OpenTab(target.Path, target.RepoName, target.WorktreeName)

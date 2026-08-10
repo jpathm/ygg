@@ -33,19 +33,20 @@ func TestZeroClosePlanIsNoOp(t *testing.T) {
 
 func TestDetect(t *testing.T) {
 	tests := []struct {
-		name   string
-		tmux   string
-		zellij string
-		want   string
+		name, herdr, tmux, zellij, want string
 	}{
+		{name: "Herdr only", herdr: "1", want: "Herdr"},
 		{name: "tmux only", tmux: "set", want: "tmux"},
-		{name: "zellij only", zellij: "set", want: "zellij"},
-		{name: "tmux wins when nested", tmux: "set", zellij: "set", want: "tmux"},
-		{name: "neither"},
+		{name: "Zellij only", zellij: "set", want: "Zellij"},
+		{name: "Herdr wins all markers", herdr: "1", tmux: "set", zellij: "set", want: "Herdr"},
+		{name: "tmux wins nested Zellij", tmux: "set", zellij: "set", want: "tmux"},
+		{name: "noncanonical Herdr ignored", herdr: "true", tmux: "set", want: "tmux"},
+		{name: "none"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HERDR_ENV", tt.herdr)
 			t.Setenv("TMUX", tt.tmux)
 			t.Setenv("ZELLIJ", tt.zellij)
 
@@ -69,18 +70,29 @@ func TestFunctionBackendDelegatesTarget(t *testing.T) {
 		Path: "/repo/.worktrees/auth", RepoName: "repo",
 		WorktreeName: "auth", Branch: "feat/auth",
 	}
-	var got Target
+	var openTarget, prepareTarget Target
 	backend := functionBackend{
 		name: "test", activeFn: func() bool { return true },
-		openFn: func(target Target) error { got = target; return wantErr },
-		prepareCloseFn: func(Target) (ClosePlan, error) {
-			return ClosePlan{}, nil
+		openFn: func(target Target) error { openTarget = target; return wantErr },
+		prepareCloseFn: func(target Target) (ClosePlan, error) {
+			prepareTarget = target
+			return NewClosePlan(true, nil), wantErr
 		},
 	}
 	if err := backend.Open(want); !errors.Is(err, wantErr) {
 		t.Fatalf("Open() error = %v, want %v", err, wantErr)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Open() target = %#v, want %#v", got, want)
+	if !reflect.DeepEqual(openTarget, want) {
+		t.Fatalf("Open() target = %#v, want %#v", openTarget, want)
+	}
+	plan, err := backend.PrepareClose(want)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("PrepareClose() error = %v, want %v", err, wantErr)
+	}
+	if !plan.Matched() {
+		t.Fatal("PrepareClose() plan did not pass through")
+	}
+	if !reflect.DeepEqual(prepareTarget, want) {
+		t.Fatalf("PrepareClose() target = %#v, want %#v", prepareTarget, want)
 	}
 }

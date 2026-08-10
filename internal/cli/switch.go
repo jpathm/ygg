@@ -46,11 +46,5 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If already in a ygg shell, just output cd command for the wrapper to eval
-	if InYggShell() {
-		fmt.Printf("cd %s\n", wt.Path)
-		return nil
-	}
-
 	return enterWorktree(targetFor(wt, wm.RepoName()))
 }

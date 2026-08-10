@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/joch/ygg/internal/multiplexer"
 	"github.com/joch/ygg/internal/shell"
 	"github.com/joch/ygg/internal/worktree"
@@ -16,7 +18,16 @@ func targetFor(wt *worktree.Worktree, repoName string) multiplexer.Target {
 }
 
 func enterWorktree(target multiplexer.Target) error {
-	return enterWorktreeWithSpawner(target, multiplexer.Detect(), shell.Spawn)
+	backend := multiplexer.Detect()
+	if useYggShell(backend) {
+		fmt.Printf("cd %s\n", target.Path)
+		return nil
+	}
+	return enterWorktreeWithSpawner(target, backend, shell.Spawn)
+}
+
+func useYggShell(backend multiplexer.Backend) bool {
+	return InYggShell() && (backend == nil || backend.Name() != "Herdr")
 }
 
 func enterWorktreeWithSpawner(
