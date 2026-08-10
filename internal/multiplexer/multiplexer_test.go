@@ -38,38 +38,22 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestFunctionBackendDelegates(t *testing.T) {
-	wantOpenErr := errors.New("open failed")
-	wantCloseErr := errors.New("close failed")
-	var gotOpen []string
-	var gotClose []string
-
+func TestFunctionBackendDelegatesTarget(t *testing.T) {
+	wantErr := errors.New("open failed")
+	want := Target{
+		Path: "/repo/.worktrees/auth", RepoName: "repo",
+		WorktreeName: "auth", Branch: "feat/auth",
+	}
+	var got Target
 	backend := functionBackend{
-		name:     "test",
-		activeFn: func() bool { return true },
-		openFn: func(dir, repoName, worktreeName string) error {
-			gotOpen = []string{dir, repoName, worktreeName}
-			return wantOpenErr
-		},
-		closeFn: func(repoName, worktreeName string) error {
-			gotClose = []string{repoName, worktreeName}
-			return wantCloseErr
-		},
+		name: "test", activeFn: func() bool { return true },
+		openFn:  func(target Target) error { got = target; return wantErr },
+		closeFn: func(string, string) error { return nil },
 	}
-
-	if backend.Name() != "test" || !backend.Active() {
-		t.Fatalf("backend identity/detection was not delegated")
+	if err := backend.Open(want); !errors.Is(err, wantErr) {
+		t.Fatalf("Open() error = %v, want %v", err, wantErr)
 	}
-	if err := backend.Open("/repo/wt", "repo", "wt"); !errors.Is(err, wantOpenErr) {
-		t.Fatalf("Open() error = %v, want %v", err, wantOpenErr)
-	}
-	if err := backend.Close("repo", "wt"); !errors.Is(err, wantCloseErr) {
-		t.Fatalf("Close() error = %v, want %v", err, wantCloseErr)
-	}
-	if !reflect.DeepEqual(gotOpen, []string{"/repo/wt", "repo", "wt"}) {
-		t.Fatalf("Open() args = %#v", gotOpen)
-	}
-	if !reflect.DeepEqual(gotClose, []string{"repo", "wt"}) {
-		t.Fatalf("Close() args = %#v", gotClose)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Open() target = %#v, want %#v", got, want)
 	}
 }

@@ -6,17 +6,24 @@ import (
 )
 
 // Backend manages worktree workspaces in one terminal multiplexer.
+type Target struct {
+	Path         string
+	RepoName     string
+	WorktreeName string
+	Branch       string
+}
+
 type Backend interface {
 	Name() string
 	Active() bool
-	Open(dir, repoName, worktreeName string) error
+	Open(Target) error
 	Close(repoName, worktreeName string) error
 }
 
 type functionBackend struct {
 	name     string
 	activeFn func() bool
-	openFn   func(string, string, string) error
+	openFn   func(Target) error
 	closeFn  func(string, string) error
 }
 
@@ -28,8 +35,8 @@ func (b functionBackend) Active() bool {
 	return b.activeFn()
 }
 
-func (b functionBackend) Open(dir, repoName, worktreeName string) error {
-	return b.openFn(dir, repoName, worktreeName)
+func (b functionBackend) Open(target Target) error {
+	return b.openFn(target)
 }
 
 func (b functionBackend) Close(repoName, worktreeName string) error {
@@ -41,14 +48,18 @@ func builtInBackends() []Backend {
 		functionBackend{
 			name:     "tmux",
 			activeFn: tmux.InTmux,
-			openFn:   tmux.OpenWindow,
-			closeFn:  tmux.CloseWindow,
+			openFn: func(target Target) error {
+				return tmux.OpenWindow(target.Path, target.RepoName, target.WorktreeName)
+			},
+			closeFn: tmux.CloseWindow,
 		},
 		functionBackend{
 			name:     "zellij",
 			activeFn: zellij.InZellij,
-			openFn:   zellij.OpenTab,
-			closeFn:  zellij.CloseTab,
+			openFn: func(target Target) error {
+				return zellij.OpenTab(target.Path, target.RepoName, target.WorktreeName)
+			},
+			closeFn: zellij.CloseTab,
 		},
 	}
 }

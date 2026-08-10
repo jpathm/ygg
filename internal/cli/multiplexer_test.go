@@ -4,21 +4,58 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/joch/ygg/internal/multiplexer"
+	"github.com/joch/ygg/internal/worktree"
 )
 
 type fakeMultiplexer struct {
-	name      string
-	openErr   error
-	closeErr  error
-	openArgs  []string
-	closeArgs []string
+	name       string
+	openErr    error
+	closeErr   error
+	openTarget multiplexer.Target
+	closeArgs  []string
+}
+
+func TestTargetForPreservesFullBranch(t *testing.T) {
+	wt := &worktree.Worktree{
+		Path: "/repo/.worktrees/feat/auth", Name: "auth", Branch: "feat/auth",
+	}
+	want := multiplexer.Target{
+		Path: wt.Path, RepoName: "repo", WorktreeName: "auth", Branch: "feat/auth",
+	}
+	if got := targetFor(wt, "repo"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("targetFor() = %#v, want %#v", got, want)
+	}
+}
+
+func TestEnterWorktreePassesStructuredTarget(t *testing.T) {
+	target := multiplexer.Target{
+		Path: "/repo/.worktrees/auth", RepoName: "repo",
+		WorktreeName: "auth", Branch: "feat/auth",
+	}
+	backend := &fakeMultiplexer{name: "tmux"}
+	spawned := false
+	err := enterWorktreeWithSpawner(target, backend, func(string, string) error {
+		spawned = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("enterWorktreeWithSpawner() error = %v", err)
+	}
+	if spawned {
+		t.Fatal("spawn called after successful backend open")
+	}
+	if !reflect.DeepEqual(backend.openTarget, target) {
+		t.Fatalf("Open() target = %#v, want %#v", backend.openTarget, target)
+	}
 }
 
 func (f *fakeMultiplexer) Name() string { return f.name }
 func (f *fakeMultiplexer) Active() bool { return true }
 
-func (f *fakeMultiplexer) Open(dir, repoName, worktreeName string) error {
-	f.openArgs = []string{dir, repoName, worktreeName}
+func (f *fakeMultiplexer) Open(target multiplexer.Target) error {
+	f.openTarget = target
 	return f.openErr
 }
 
@@ -28,6 +65,7 @@ func (f *fakeMultiplexer) Close(repoName, worktreeName string) error {
 }
 
 func TestEnterWorktreeUsesActiveMultiplexer(t *testing.T) {
+	target := multiplexer.Target{Path: "/repo/wt", RepoName: "repo", WorktreeName: "wt"}
 	backend := &fakeMultiplexer{name: "tmux"}
 	spawned := false
 	spawn := func(string, string) error {
@@ -35,14 +73,14 @@ func TestEnterWorktreeUsesActiveMultiplexer(t *testing.T) {
 		return nil
 	}
 
-	if err := enterWorktreeWithSpawner("/repo/wt", "repo", "wt", backend, spawn); err != nil {
+	if err := enterWorktreeWithSpawner(target, backend, spawn); err != nil {
 		t.Fatalf("enterWorktreeWithSpawner() error = %v", err)
 	}
 	if spawned {
 		t.Fatal("spawn called after successful backend open")
 	}
-	if !reflect.DeepEqual(backend.openArgs, []string{"/repo/wt", "repo", "wt"}) {
-		t.Fatalf("Open() args = %#v", backend.openArgs)
+	if !reflect.DeepEqual(backend.openTarget, target) {
+		t.Fatalf("Open() target = %#v", backend.openTarget)
 	}
 }
 
@@ -56,7 +94,7 @@ func TestEnterWorktreeFallsBackAfterOpenFailure(t *testing.T) {
 		return spawnErr
 	}
 
-	err := enterWorktreeWithSpawner("/repo/wt", "repo", "wt", backend, spawn)
+	err := enterWorktreeWithSpawner(multiplexer.Target{Path: "/repo/wt", RepoName: "repo", WorktreeName: "wt"}, backend, spawn)
 	if !errors.Is(err, spawnErr) {
 		t.Fatalf("error = %v, want spawn error %v", err, spawnErr)
 	}
@@ -72,7 +110,7 @@ func TestEnterWorktreeSpawnsWithoutMultiplexer(t *testing.T) {
 		return nil
 	}
 
-	if err := enterWorktreeWithSpawner("/repo/wt", "repo", "wt", nil, spawn); err != nil {
+	if err := enterWorktreeWithSpawner(multiplexer.Target{Path: "/repo/wt", RepoName: "repo", WorktreeName: "wt"}, nil, spawn); err != nil {
 		t.Fatalf("enterWorktreeWithSpawner() error = %v", err)
 	}
 	if !called {

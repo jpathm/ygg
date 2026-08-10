@@ -92,5 +92,5 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	return enterWorktree(wt.Path, wm.RepoName(), wt.Name)
+	return enterWorktree(targetFor(wt, wm.RepoName()))
 }
