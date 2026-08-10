@@ -13,9 +13,9 @@ var switchCmd = &cobra.Command{
 	Short: "Switch to a worktree",
 	Long: `Switch to an existing worktree by name.
 
-Inside tmux or Zellij, this focuses an existing named workspace or creates one.
-Otherwise, it spawns a subshell in the worktree directory; exit that shell to
-return to your original directory.`,
+Inside Herdr, tmux, or Zellij, this focuses an existing named workspace or
+creates one. Otherwise, it spawns a subshell in the worktree directory; exit
+that shell to return to your original directory.`,
 	Args:              cobra.ExactArgs(1),
 	Aliases:           []string{"sw"},
 	RunE:              runSwitch,
