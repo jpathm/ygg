@@ -6,21 +6,47 @@ import (
 	"testing"
 )
 
+func TestClosePlan(t *testing.T) {
+	wantErr := errors.New("close failed")
+	called := false
+	plan := NewClosePlan(true, func() error { called = true; return wantErr })
+	if !plan.Matched() {
+		t.Fatal("Matched() = false, want true")
+	}
+	if err := plan.Execute(); !errors.Is(err, wantErr) {
+		t.Fatalf("Execute() error = %v, want %v", err, wantErr)
+	}
+	if !called {
+		t.Fatal("prepared close function was not called")
+	}
+}
+
+func TestZeroClosePlanIsNoOp(t *testing.T) {
+	var plan ClosePlan
+	if plan.Matched() {
+		t.Fatal("zero ClosePlan matched unexpectedly")
+	}
+	if err := plan.Execute(); err != nil {
+		t.Fatalf("zero ClosePlan Execute() error = %v", err)
+	}
+}
+
 func TestDetect(t *testing.T) {
 	tests := []struct {
-		name   string
-		tmux   string
-		zellij string
-		want   string
+		name, herdr, tmux, zellij, want string
 	}{
+		{name: "Herdr only", herdr: "1", want: "Herdr"},
 		{name: "tmux only", tmux: "set", want: "tmux"},
-		{name: "zellij only", zellij: "set", want: "zellij"},
-		{name: "tmux wins when nested", tmux: "set", zellij: "set", want: "tmux"},
-		{name: "neither"},
+		{name: "Zellij only", zellij: "set", want: "zellij"},
+		{name: "Herdr wins all markers", herdr: "1", tmux: "set", zellij: "set", want: "Herdr"},
+		{name: "tmux wins nested Zellij", tmux: "set", zellij: "set", want: "tmux"},
+		{name: "noncanonical Herdr ignored", herdr: "true", tmux: "set", want: "tmux"},
+		{name: "none"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HERDR_ENV", tt.herdr)
 			t.Setenv("TMUX", tt.tmux)
 			t.Setenv("ZELLIJ", tt.zellij)
 
@@ -38,38 +64,35 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestFunctionBackendDelegates(t *testing.T) {
-	wantOpenErr := errors.New("open failed")
-	wantCloseErr := errors.New("close failed")
-	var gotOpen []string
-	var gotClose []string
-
+func TestFunctionBackendDelegatesTarget(t *testing.T) {
+	wantErr := errors.New("open failed")
+	want := Target{
+		Path: "/repo/.worktrees/auth", RepoName: "repo",
+		WorktreeName: "auth", Branch: "feat/auth",
+	}
+	var openTarget, prepareTarget Target
 	backend := functionBackend{
-		name:     "test",
-		activeFn: func() bool { return true },
-		openFn: func(dir, repoName, worktreeName string) error {
-			gotOpen = []string{dir, repoName, worktreeName}
-			return wantOpenErr
-		},
-		closeFn: func(repoName, worktreeName string) error {
-			gotClose = []string{repoName, worktreeName}
-			return wantCloseErr
+		name: "test", activeFn: func() bool { return true },
+		openFn: func(target Target) error { openTarget = target; return wantErr },
+		prepareCloseFn: func(target Target) (ClosePlan, error) {
+			prepareTarget = target
+			return NewClosePlan(true, nil), wantErr
 		},
 	}
-
-	if backend.Name() != "test" || !backend.Active() {
-		t.Fatalf("backend identity/detection was not delegated")
+	if err := backend.Open(want); !errors.Is(err, wantErr) {
+		t.Fatalf("Open() error = %v, want %v", err, wantErr)
 	}
-	if err := backend.Open("/repo/wt", "repo", "wt"); !errors.Is(err, wantOpenErr) {
-		t.Fatalf("Open() error = %v, want %v", err, wantOpenErr)
+	if !reflect.DeepEqual(openTarget, want) {
+		t.Fatalf("Open() target = %#v, want %#v", openTarget, want)
 	}
-	if err := backend.Close("repo", "wt"); !errors.Is(err, wantCloseErr) {
-		t.Fatalf("Close() error = %v, want %v", err, wantCloseErr)
+	plan, err := backend.PrepareClose(want)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("PrepareClose() error = %v, want %v", err, wantErr)
 	}
-	if !reflect.DeepEqual(gotOpen, []string{"/repo/wt", "repo", "wt"}) {
-		t.Fatalf("Open() args = %#v", gotOpen)
+	if !plan.Matched() {
+		t.Fatal("PrepareClose() plan did not pass through")
 	}
-	if !reflect.DeepEqual(gotClose, []string{"repo", "wt"}) {
-		t.Fatalf("Close() args = %#v", gotClose)
+	if !reflect.DeepEqual(prepareTarget, want) {
+		t.Fatalf("PrepareClose() target = %#v, want %#v", prepareTarget, want)
 	}
 }

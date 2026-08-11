@@ -39,7 +39,7 @@ ygg new my-feature
 This will:
 1. Fetch latest from origin
 2. Create a new worktree with branch `my-feature` based on the default branch
-3. Open the worktree in the active tmux/Zellij multiplexer, or enter a subshell
+3. Open the worktree in the active Herdr/tmux/Zellij workspace manager, or enter a subshell
 
 Worktrees are created at `.worktrees/<feature-name>` inside the repository root.
 
@@ -57,7 +57,7 @@ Shows all worktrees. Current worktree is marked with `*`, modified ones show `[m
 ygg switch my-feature
 ```
 
-Focuses or creates a named tmux/Zellij workspace when a supported multiplexer is active. Otherwise, enters a subshell in the specified worktree.
+Focuses or creates a workspace when a supported workspace manager is active. Otherwise, enters a subshell in the specified worktree.
 
 ### Remove a worktree
 
@@ -113,16 +113,15 @@ When inside a ygg shell, `$YGG_WORKTREE` is set to the current worktree name. Ad
 PS1='${YGG_WORKTREE:+[$YGG_WORKTREE] }'$PS1
 ```
 
-## Terminal Multiplexer Integration
+## Workspace Integration
 
-When running inside [tmux](https://github.com/tmux/tmux/wiki) or [Zellij](https://zellij.dev/), ygg automatically uses a named window/tab instead of spawning a subshell. No configuration is needed; ygg detects tmux via `$TMUX` and Zellij via `$ZELLIJ`.
+When running inside [Herdr](https://herdr.dev/) 0.6.2 or later, [tmux](https://github.com/tmux/tmux/wiki), or [Zellij](https://zellij.dev/), ygg opens or focuses a workspace instead of spawning a subshell. Herdr is detected via `HERDR_ENV=1`; it uses native grouped worktree workspaces labeled with the full branch name, such as `xyz` or `feat/auth`. Tmux and Zellij are detected via `$TMUX` and `$ZELLIJ` and keep their `<repo>/<worktree>` workspace names. Tmux operations are limited to the current session.
 
-- `ygg new my-feature` creates a workspace named `<repo>/my-feature` rooted at the new worktree
-- `ygg switch my-feature` focuses the existing workspace, or creates one if it does not exist
-- `ygg remove` and `ygg clean` close matching workspaces after successful worktree removal
-- Tmux operations are limited to the current session
+- `ygg new my-feature` creates or focuses the worktree workspace
+- `ygg switch my-feature` focuses the workspace, or reopens it if needed
+- `ygg remove` and `ygg clean` close matching workspaces only after successful worktree removal
 
-If both environments are present, tmux takes precedence. If opening a workspace fails, ygg reports the error and falls back to the normal subshell behavior. Cleanup failures are reported but do not undo worktree removal.
+Workspace backends are selected in this order: Herdr → ygg-shell → tmux → Zellij → subshell. Inside a ygg shell, `ygg new` and `ygg switch` keep their existing `cd` behavior before tmux or Zellij detection. If opening a workspace fails, ygg reports the error and falls back to a subshell without trying another backend. If closing a workspace fails, ygg warns without undoing Git removal.
 
 ## Agent Skills
 
@@ -147,9 +146,9 @@ ygg skill uninstall
 
 ## How it works
 
-Ygg uses named tmux windows or Zellij tabs when invoked inside a supported multiplexer. Otherwise, it spawns subshells in worktree directories; when you're done, `exit` to return to where you started.
+Ygg selects workspace ownership in this order: Herdr → ygg-shell → tmux → Zellij → subshell. Herdr uses native grouped worktree workspaces named with the full branch name; tmux and Zellij use named `<repo>/<worktree>` workspaces. Otherwise, ygg spawns a subshell in the worktree directory; when you're done, `exit` to return to where you started.
 
-Inside a ygg shell, `ygg new` and `ygg switch` emit a `cd` instruction before multiplexer detection, so the wrapper changes directory directly instead of nesting shells or opening a workspace.
+Inside a ygg shell, `ygg new` and `ygg switch` emit a `cd` instruction before tmux or Zellij detection, so the wrapper changes directory directly instead of nesting shells or opening a workspace. `ygg new` creates or focuses a workspace, while `ygg switch` focuses or reopens one. `ygg remove` and `ygg clean` close a matching workspace only after Git removes the worktree; an open failure falls back directly to a subshell, and a close failure only warns without undoing removal.
 
 ## Requirements
 

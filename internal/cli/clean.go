@@ -116,17 +116,56 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	current, _ := wm.Current()
+	toRemove = withCurrentWorktreeLast(toRemove, current)
+
 	backend := multiplexer.Detect()
+	needsReturnToPrimary := false
 	for _, wt := range toRemove {
-		if err := wm.Remove(wt.Name); err != nil {
-			errorMsg("Failed to remove %s: %v", wt.Name, err)
-		} else {
-			success("Removed %s", wt.Name)
-			if err := closeWorkspace(backend, wm.RepoName(), wt.Name); err != nil {
-				info("Could not close %s workspace: %v", backend.Name(), err)
-			}
+		isCurrent := current != nil && current.Path == wt.Path
+		result := removeWithWorkspace(
+			backend,
+			targetFor(wt, wm.RepoName()),
+			func() error { return wm.Remove(wt.Name) },
+		)
+		if result.PrepareError != nil {
+			info("Could not prepare workspace close for %s: %v", wt.Name, result.PrepareError)
+		}
+		if result.RemoveError != nil {
+			errorMsg("Failed to remove %s: %v", wt.Name, result.RemoveError)
+			continue
+		}
+		success("Removed %s", wt.Name)
+		if result.CloseError != nil {
+			info("Could not close workspace for %s: %v", wt.Name, result.CloseError)
+		}
+		if isCurrent && !result.WorkspaceHandled {
+			needsReturnToPrimary = true
 		}
 	}
 
+	if needsReturnToPrimary {
+		return returnToPrimary(wm.RepoPath())
+	}
 	return nil
+}
+
+func withCurrentWorktreeLast(worktrees []*worktree.Worktree, current *worktree.Worktree) []*worktree.Worktree {
+	if current == nil {
+		return worktrees
+	}
+
+	ordered := make([]*worktree.Worktree, 0, len(worktrees))
+	var currentCandidate *worktree.Worktree
+	for _, wt := range worktrees {
+		if wt.Path == current.Path {
+			currentCandidate = wt
+			continue
+		}
+		ordered = append(ordered, wt)
+	}
+	if currentCandidate == nil {
+		return worktrees
+	}
+	return append(ordered, currentCandidate)
 }

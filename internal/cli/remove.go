@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/joch/ygg/internal/multiplexer"
-	"github.com/joch/ygg/internal/shell"
 	"github.com/joch/ygg/internal/worktree"
 	"github.com/spf13/cobra"
 )
@@ -42,37 +41,38 @@ func runRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var worktreeName string
+	var target *worktree.Worktree
 	var needsCd bool
 
 	if len(args) > 0 {
 		// Remove by name
-		worktreeName = args[0]
-		wt, err := wm.Get(worktreeName)
+		worktreeName := args[0]
+		var err error
+		target, err = wm.Get(worktreeName)
 		if err != nil {
 			errorMsg("Worktree %q not found", worktreeName)
 			return err
 		}
-		if wt.IsPrimary {
+		if target.IsPrimary {
 			errorMsg("Cannot remove the main worktree")
 			return fmt.Errorf("cannot remove primary worktree")
 		}
-		if !forceRemove && wm.HasUncommittedChanges(wt.Path) {
+		if !forceRemove && wm.HasUncommittedChanges(target.Path) {
 			errorMsg("Worktree %s has uncommitted changes", worktreeName)
 			info("Commit or stash your changes, or use --force")
 			return fmt.Errorf("uncommitted changes")
 		}
 		if !forceRemove {
-			merged, err := wm.IsBranchMerged(wt.Branch)
+			merged, err := wm.IsBranchMerged(target.Branch)
 			if err == nil && !merged {
-				errorMsg("Branch %s has not been merged", wt.Branch)
+				errorMsg("Branch %s has not been merged", target.Branch)
 				info("Merge your changes first, or use --force to remove anyway")
 				return fmt.Errorf("unmerged branch")
 			}
 		}
 		// Check if we're inside this worktree
 		current, _ := wm.Current()
-		needsCd = current != nil && current.Name == worktreeName
+		needsCd = current != nil && current.Path == target.Path
 	} else {
 		// Remove current worktree
 		current, err := wm.Current()
@@ -98,36 +98,35 @@ func runRemove(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("unmerged branch")
 			}
 		}
-		worktreeName = current.Name
+		target = current
 		needsCd = true
 	}
 
-	info("Removing worktree: %s", worktreeName)
+	info("Removing worktree: %s", target.Name)
 
-	if err := wm.Remove(worktreeName); err != nil {
-		errorMsg("Failed to remove worktree: %v", err)
-		return err
+	result := removeWithWorkspace(
+		multiplexer.Detect(),
+		targetFor(target, wm.RepoName()),
+		func() error { return wm.Remove(target.Name) },
+	)
+	if result.PrepareError != nil {
+		info("Could not prepare workspace close: %v", result.PrepareError)
+	}
+	if result.RemoveError != nil {
+		errorMsg("Failed to remove worktree: %v", result.RemoveError)
+		return result.RemoveError
+	}
+	success("Removed worktree: %s", target.Name)
+	if result.CloseError != nil {
+		info("Could not close workspace: %v", result.CloseError)
 	}
 
-	success("Removed worktree: %s", worktreeName)
-
-	backend := multiplexer.Detect()
-	if err := closeWorkspace(backend, wm.RepoName(), worktreeName); err != nil {
-		info("Could not close %s workspace: %v", backend.Name(), err)
+	if needsCd && result.WorkspaceHandled {
+		return nil
 	}
 
 	if needsCd {
-		mainPath := wm.RepoPath()
-		// Change to main repo before spawning shell — the worktree dir no longer exists
-		if err := os.Chdir(mainPath); err != nil {
-			return fmt.Errorf("failed to change to main repo: %w", err)
-		}
-		if InYggShell() {
-			fmt.Printf("cd %s\n", mainPath)
-			return nil
-		}
-		info("Returning to main...")
-		return shell.Spawn(mainPath, "main")
+		return returnToPrimary(wm.RepoPath())
 	}
 
 	return nil

@@ -30,9 +30,10 @@ ygg clean --force    # Clean without confirmation prompts
 
 - `ygg new` fetches latest from origin, bases the branch on `main`/`master`, and copies untracked files from the main worktree
 - Sets `$YGG_WORKTREE` env var inside the shell for prompt integration
-- Tmux and Zellij are detected via `$TMUX`/`$ZELLIJ`: ygg opens or focuses a named `<repo>/<worktree>` workspace instead of nesting a shell
-- Tmux takes precedence when both variables are set, and operates only in the current tmux session
-- `ygg remove` and `ygg clean` close matching multiplexer workspaces after removing worktrees
+- Herdr is detected via `HERDR_ENV=1`; ygg opens or focuses a native worktree workspace labeled with the full branch name
+- Herdr takes precedence over ygg-shell, tmux, and Zellij; without Herdr, ygg-shell keeps its existing `cd` behavior before tmux/Zellij detection
+- Tmux and Zellij keep named `<repo>/<worktree>` workspaces, with tmux preceding Zellij
+- `ygg remove` and `ygg clean` close matching workspaces only after successful worktree removal
 - Inside an existing ygg shell, `ygg new` and `ygg switch` emit a `cd` command for the wrapper to evaluate before multiplexer detection
 - `ygg remove` without a name removes the current worktree (if inside one) and returns you to main
 

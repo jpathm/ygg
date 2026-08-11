@@ -13,9 +13,9 @@ var switchCmd = &cobra.Command{
 	Short: "Switch to a worktree",
 	Long: `Switch to an existing worktree by name.
 
-Inside tmux or Zellij, this focuses an existing named workspace or creates one.
-Otherwise, it spawns a subshell in the worktree directory; exit that shell to
-return to your original directory.`,
+Inside Herdr, tmux, or Zellij, this focuses an existing named workspace or
+creates one. Otherwise, it spawns a subshell in the worktree directory; exit
+that shell to return to your original directory.`,
 	Args:              cobra.ExactArgs(1),
 	Aliases:           []string{"sw"},
 	RunE:              runSwitch,
@@ -46,11 +46,5 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If already in a ygg shell, just output cd command for the wrapper to eval
-	if InYggShell() {
-		fmt.Printf("cd %s\n", wt.Path)
-		return nil
-	}
-
-	return enterWorktree(wt.Path, wm.RepoName(), wt.Name)
+	return enterWorktree(targetFor(wt, wm.RepoName()))
 }

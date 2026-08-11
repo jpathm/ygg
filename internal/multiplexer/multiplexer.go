@@ -1,23 +1,59 @@
 package multiplexer
 
 import (
+	"os"
+
+	"github.com/joch/ygg/internal/herdr"
 	"github.com/joch/ygg/internal/tmux"
 	"github.com/joch/ygg/internal/zellij"
 )
 
 // Backend manages worktree workspaces in one terminal multiplexer.
+type Target struct {
+	Path         string
+	RepoName     string
+	WorktreeName string
+	Branch       string
+}
+
+// ClosePlan captures a workspace close operation prepared before its
+// associated worktree is removed.
+type ClosePlan struct {
+	matched bool
+	execute func() error
+}
+
+// NewClosePlan creates a workspace close plan.
+func NewClosePlan(matched bool, execute func() error) ClosePlan {
+	return ClosePlan{matched: matched, execute: execute}
+}
+
+// Matched reports whether preparation found a workspace that can handle the
+// caller's return-to-primary behavior.
+func (p ClosePlan) Matched() bool {
+	return p.matched
+}
+
+// Execute runs the prepared close operation. The zero plan is a no-op.
+func (p ClosePlan) Execute() error {
+	if p.execute == nil {
+		return nil
+	}
+	return p.execute()
+}
+
 type Backend interface {
 	Name() string
 	Active() bool
-	Open(dir, repoName, worktreeName string) error
-	Close(repoName, worktreeName string) error
+	Open(Target) error
+	PrepareClose(Target) (ClosePlan, error)
 }
 
 type functionBackend struct {
-	name     string
-	activeFn func() bool
-	openFn   func(string, string, string) error
-	closeFn  func(string, string) error
+	name           string
+	activeFn       func() bool
+	openFn         func(Target) error
+	prepareCloseFn func(Target) (ClosePlan, error)
 }
 
 func (b functionBackend) Name() string {
@@ -28,27 +64,59 @@ func (b functionBackend) Active() bool {
 	return b.activeFn()
 }
 
-func (b functionBackend) Open(dir, repoName, worktreeName string) error {
-	return b.openFn(dir, repoName, worktreeName)
+func (b functionBackend) Open(target Target) error {
+	return b.openFn(target)
 }
 
-func (b functionBackend) Close(repoName, worktreeName string) error {
-	return b.closeFn(repoName, worktreeName)
+func (b functionBackend) PrepareClose(target Target) (ClosePlan, error) {
+	return b.prepareCloseFn(target)
 }
 
 func builtInBackends() []Backend {
 	return []Backend{
 		functionBackend{
+			name:     "Herdr",
+			activeFn: herdr.InHerdr,
+			openFn: func(target Target) error {
+				return herdr.OpenWorkspace(target.Path, target.Branch, target.WorktreeName)
+			},
+			prepareCloseFn: func(target Target) (ClosePlan, error) {
+				workspaceID, found, err := herdr.PrepareClose(target.Path)
+				if err != nil {
+					return ClosePlan{}, err
+				}
+				if !found {
+					return ClosePlan{}, nil
+				}
+				callerWorkspaceID := os.Getenv("HERDR_WORKSPACE_ID")
+				return NewClosePlan(workspaceID == callerWorkspaceID, func() error {
+					return herdr.CloseWorkspace(workspaceID)
+				}), nil
+			},
+		},
+		functionBackend{
 			name:     "tmux",
 			activeFn: tmux.InTmux,
-			openFn:   tmux.OpenWindow,
-			closeFn:  tmux.CloseWindow,
+			openFn: func(target Target) error {
+				return tmux.OpenWindow(target.Path, target.RepoName, target.WorktreeName)
+			},
+			prepareCloseFn: func(target Target) (ClosePlan, error) {
+				return NewClosePlan(false, func() error {
+					return tmux.CloseWindow(target.RepoName, target.WorktreeName)
+				}), nil
+			},
 		},
 		functionBackend{
 			name:     "zellij",
 			activeFn: zellij.InZellij,
-			openFn:   zellij.OpenTab,
-			closeFn:  zellij.CloseTab,
+			openFn: func(target Target) error {
+				return zellij.OpenTab(target.Path, target.RepoName, target.WorktreeName)
+			},
+			prepareCloseFn: func(target Target) (ClosePlan, error) {
+				return NewClosePlan(false, func() error {
+					return zellij.CloseTab(target.RepoName, target.WorktreeName)
+				}), nil
+			},
 		},
 	}
 }

@@ -294,6 +294,7 @@ func (m *Manager) MergedBranches(into string) ([]string, error) {
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
 		line = strings.TrimPrefix(line, "* ") // Remove current branch marker
+		line = strings.TrimPrefix(line, "+ ") // Remove linked worktree marker
 		if line != "" && line != into {
 			branches = append(branches, line)
 		}

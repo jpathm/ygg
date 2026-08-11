@@ -18,11 +18,11 @@ This will:
 2. Create a new worktree with a branch named <name>, based on the latest
    origin/<default-branch> (falling back to the local default branch when
    there is no remote)
-3. Open the worktree in the active tmux/Zellij multiplexer, or enter a
-   subshell when no multiplexer is active
+3. Open the worktree in the active Herdr/tmux/Zellij workspace manager, or
+   enter a subshell when no workspace backend is active
 
 Exit the subshell to return to your original directory when ygg is not using
-a multiplexer workspace.`,
+a workspace.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNew,
 }
@@ -86,11 +86,5 @@ func runNew(cmd *cobra.Command, args []string) error {
 		info("Copied %d untracked file(s) from main worktree", wt.CopiedFiles)
 	}
 
-	// If already in a ygg shell, just output cd command for the wrapper to eval
-	if InYggShell() {
-		fmt.Printf("cd %s\n", wt.Path)
-		return nil
-	}
-
-	return enterWorktree(wt.Path, wm.RepoName(), wt.Name)
+	return enterWorktree(targetFor(wt, wm.RepoName()))
 }
