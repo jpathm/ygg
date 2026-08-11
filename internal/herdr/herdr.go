@@ -50,13 +50,8 @@ type workspaceWorktree struct {
 }
 
 func OpenWorkspace(path, branch, worktreeName string) error {
-	workspaceID := os.Getenv("HERDR_WORKSPACE_ID")
-	if workspaceID == "" {
-		return fmt.Errorf("cannot open Herdr workspace for %q: HERDR_WORKSPACE_ID is not set", path)
-	}
 	output, err := commands.CombinedOutput(
 		"herdr", "worktree", "open",
-		"--workspace", workspaceID,
 		"--path", path,
 		"--label", WorkspaceLabel(branch, worktreeName),
 		"--focus",
