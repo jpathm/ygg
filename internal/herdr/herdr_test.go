@@ -2,6 +2,7 @@ package herdr
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,7 +74,25 @@ func TestOpenWorkspaceUsesTargetPathLabelAndFocus(t *testing.T) {
 		{name: "stale caller workspace", workspaceID: "stale-workspace"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("HERDR_WORKSPACE_ID", tt.workspaceID)
+			if tt.workspaceID == "" {
+				previous, wasSet := os.LookupEnv("HERDR_WORKSPACE_ID")
+				if err := os.Unsetenv("HERDR_WORKSPACE_ID"); err != nil {
+					t.Fatalf("Unsetenv(HERDR_WORKSPACE_ID): %v", err)
+				}
+				t.Cleanup(func() {
+					var err error
+					if wasSet {
+						err = os.Setenv("HERDR_WORKSPACE_ID", previous)
+					} else {
+						err = os.Unsetenv("HERDR_WORKSPACE_ID")
+					}
+					if err != nil {
+						t.Errorf("restore HERDR_WORKSPACE_ID: %v", err)
+					}
+				})
+			} else {
+				t.Setenv("HERDR_WORKSPACE_ID", tt.workspaceID)
+			}
 			fake := &fakeRunner{results: []commandResult{{
 				output: `{"id":"cli","result":{"type":"worktree_opened","workspace":{"workspace_id":"w5"}}}`,
 			}}}
