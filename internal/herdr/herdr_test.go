@@ -2,6 +2,7 @@ package herdr
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -64,36 +65,52 @@ func TestWorkspaceLabel(t *testing.T) {
 	}
 }
 
-func TestOpenWorkspaceUsesCallerGroupPathBranchAndFocus(t *testing.T) {
-	t.Setenv("HERDR_WORKSPACE_ID", "w4")
-	fake := &fakeRunner{results: []commandResult{{
-		output: `{"id":"cli","result":{"type":"worktree_opened","workspace":{"workspace_id":"w5"}}}`,
-	}}}
-	useRunner(t, fake)
-	err := OpenWorkspace("/repo/.worktrees/auth", "feat/auth", "auth")
-	if err != nil {
-		t.Fatalf("OpenWorkspace() error = %v", err)
-	}
-	want := commandCall{name: "herdr", args: []string{
-		"worktree", "open", "--workspace", "w4",
-		"--path", "/repo/.worktrees/auth",
-		"--label", "feat/auth", "--focus",
-	}}
-	if !reflect.DeepEqual(fake.calls, []commandCall{want}) {
-		t.Fatalf("calls = %#v, want %#v", fake.calls, []commandCall{want})
-	}
-}
+func TestOpenWorkspaceUsesTargetPathLabelAndFocus(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		workspaceID string
+	}{
+		{name: "unset caller workspace"},
+		{name: "stale caller workspace", workspaceID: "stale-workspace"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.workspaceID == "" {
+				previous, wasSet := os.LookupEnv("HERDR_WORKSPACE_ID")
+				if err := os.Unsetenv("HERDR_WORKSPACE_ID"); err != nil {
+					t.Fatalf("Unsetenv(HERDR_WORKSPACE_ID): %v", err)
+				}
+				t.Cleanup(func() {
+					var err error
+					if wasSet {
+						err = os.Setenv("HERDR_WORKSPACE_ID", previous)
+					} else {
+						err = os.Unsetenv("HERDR_WORKSPACE_ID")
+					}
+					if err != nil {
+						t.Errorf("restore HERDR_WORKSPACE_ID: %v", err)
+					}
+				})
+			} else {
+				t.Setenv("HERDR_WORKSPACE_ID", tt.workspaceID)
+			}
+			fake := &fakeRunner{results: []commandResult{{
+				output: `{"id":"cli","result":{"type":"worktree_opened","workspace":{"workspace_id":"w5"}}}`,
+			}}}
+			useRunner(t, fake)
 
-func TestOpenWorkspaceRequiresCallerWorkspace(t *testing.T) {
-	t.Setenv("HERDR_WORKSPACE_ID", "")
-	fake := &fakeRunner{}
-	useRunner(t, fake)
-	err := OpenWorkspace("/repo/.worktrees/auth", "feat/auth", "auth")
-	if err == nil || !strings.Contains(err.Error(), "HERDR_WORKSPACE_ID") {
-		t.Fatalf("OpenWorkspace() error = %v", err)
-	}
-	if len(fake.calls) != 0 {
-		t.Fatalf("calls = %#v, want none", fake.calls)
+			err := OpenWorkspace("/repo/.worktrees/auth", "feat/auth", "auth")
+			if err != nil {
+				t.Fatalf("OpenWorkspace() error = %v", err)
+			}
+			want := commandCall{name: "herdr", args: []string{
+				"worktree", "open",
+				"--path", "/repo/.worktrees/auth",
+				"--label", "feat/auth", "--focus",
+			}}
+			if !reflect.DeepEqual(fake.calls, []commandCall{want}) {
+				t.Fatalf("calls = %#v, want %#v", fake.calls, []commandCall{want})
+			}
+		})
 	}
 }
 
