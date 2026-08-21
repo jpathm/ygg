@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/joch/ygg/internal/linear"
@@ -207,5 +208,13 @@ func TestResolveNamePassesTitleAndTeam(t *testing.T) {
 	}
 	if f.createdTitle != "Unified tui" {
 		t.Errorf("title = %q, want %q", f.createdTitle, "Unified tui")
+	}
+}
+
+func TestNewCmdLongDescribesLinear(t *testing.T) {
+	for _, want := range []string{"Linear", "LINEAR_API_KEY"} {
+		if !strings.Contains(newCmd.Long, want) {
+			t.Errorf("newCmd.Long does not mention %q", want)
+		}
 	}
 }

@@ -15,11 +15,19 @@ var newCmd = &cobra.Command{
 
 This will:
 1. Fetch the latest changes from origin
-2. Create a new worktree with a branch named <name>, based on the latest
+2. Resolve <name> against Linear. A name that looks like a Linear branch or
+   identifier (for example snk-31-add-widget) is verified and used as typed.
+   Any other name creates a Linear issue in the team mapped to this
+   repository, and the worktree takes that issue's branch name.
+3. Create a new worktree with a branch named <name>, based on the latest
    origin/<default-branch> (falling back to the local default branch when
    there is no remote)
-3. Open the worktree in the active Herdr/tmux/Zellij workspace manager, or
+4. Open the worktree in the active Herdr/tmux/Zellij workspace manager, or
    enter a subshell when no workspace backend is active
+
+Linear is optional and never blocks. Without LINEAR_API_KEY, without a team
+mapped in ~/.config/ygg/config.json, or when Linear cannot be reached, ygg
+prints a warning and creates an unlinked worktree.
 
 Exit the subshell to return to your original directory when ygg is not using
 a workspace.`,
@@ -59,6 +67,10 @@ func runNew(cmd *cobra.Command, args []string) error {
 		errorMsg("Could not detect default branch: %v", err)
 		return err
 	}
+
+	// Resolve the requested name against Linear before creating the branch.
+	// This can rename the worktree, so it must run before wm.Create.
+	name = resolveTicket(cmd.Context(), wm, name)
 
 	info("Creating worktree: %s (default branch %s)", name, defaultBranch)
 

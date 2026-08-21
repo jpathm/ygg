@@ -14,3 +14,9 @@ func TestWorkspaceHelpMentionsHerdr(t *testing.T) {
 		}
 	}
 }
+
+func TestNewHelpMentionsUnlinkedWarning(t *testing.T) {
+	if !strings.Contains(newCmd.Long, "unlinked") {
+		t.Error("new help does not explain the unlinked case")
+	}
+}

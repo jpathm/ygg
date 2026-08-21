@@ -89,6 +89,66 @@ Removes worktrees whose branches have been merged to main.
 | `ygg remove [name]` | Remove a worktree |
 | `ygg clean` | Remove merged worktrees |
 
+## Linear integration
+
+`ygg new` links worktrees to Linear issues. It is optional, and it never
+prevents a worktree from being created.
+
+A name that looks like a Linear branch or identifier is verified and used
+exactly as typed:
+
+```sh
+ygg new snk-31-owl-have-cli-also-host-pure-html
+# ℹ Linked to SNK-31 — OWL - have cli also host pure html
+```
+
+Any other name creates an issue and adopts its branch name:
+
+```sh
+ygg new unified-tui
+# ℹ Created SNK-42 — https://linear.app/gridkit/issue/SNK-42/unified-tui
+# ✓ Created worktree at .worktrees/snk-42-unified-tui
+```
+
+### Setup
+
+Export a Linear personal API key, created under Settings → API in Linear:
+
+```sh
+export LINEAR_API_KEY=lin_api_...
+```
+
+Then map repositories onto Linear teams in `~/.config/ygg/config.json`:
+
+```json
+{
+  "linear": {
+    "defaultTeam": "SKUNK",
+    "teams": {
+      "GridKitLLC/otter-tools": "SKUNK",
+      "GridKitLLC/ygg": "SKUNK"
+    }
+  }
+}
+```
+
+Keys are `owner/repo`, matched against the `origin` remote; SSH and HTTPS
+remotes both work. `defaultTeam` is used when no entry matches. The API key is
+never read from this file.
+
+### When Linear is unavailable
+
+Every one of these prints a warning and still creates the worktree:
+
+| Situation | Result |
+| --- | --- |
+| `LINEAR_API_KEY` unset | Unlinked worktree |
+| Repository unmapped and no `defaultTeam` | Unlinked worktree |
+| `config.json` malformed | Warning, then treated as unconfigured |
+| Linear unreachable | Unlinked worktree |
+| API key rejected | Unlinked worktree |
+| Named issue does not exist | Worktree created under the name as typed |
+
 ## Shell Completion
 
 ```bash

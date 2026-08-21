@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"unicode"
 
+	"github.com/joch/ygg/internal/config"
 	"github.com/joch/ygg/internal/linear"
+	"github.com/joch/ygg/internal/worktree"
 )
 
 // referencePattern matches a Linear branch name or bare identifier: a short
@@ -96,4 +99,33 @@ func resolveName(ctx context.Context, svc issueService, team, repo, name string)
 		return name, fmt.Sprintf("Could not create Linear issue: %v — unlinked", err)
 	}
 	return issue.BranchName, fmt.Sprintf("Created %s — %s", issue.Identifier, issue.URL)
+}
+
+// resolveTicket resolves the requested worktree name against Linear and prints
+// whatever it learned. It returns the branch name to create, which is the
+// requested name unless ygg created an issue for it.
+func resolveTicket(ctx context.Context, wm *worktree.Manager, name string) string {
+	cfg, err := config.Load()
+	if err != nil {
+		// A malformed config is reported rather than ignored: a silently
+		// skipped typo would leave the user believing this feature is on.
+		info("Warning: %v", err)
+		cfg = config.Config{}
+	}
+
+	remote := wm.RemoteURL()
+
+	// A nil issueService means "no API key configured". Leaving svc as a nil
+	// interface (rather than a typed nil pointer) is what makes the nil check
+	// inside resolveName work.
+	var svc issueService
+	if key := os.Getenv("LINEAR_API_KEY"); key != "" {
+		svc = linear.NewClient(key)
+	}
+
+	branch, note := resolveName(ctx, svc, cfg.TeamFor(remote), config.NormalizeRemote(remote), name)
+	if note != "" {
+		info("%s", note)
+	}
+	return branch
 }
