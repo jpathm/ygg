@@ -72,7 +72,7 @@ func TestResolveNameReferenceShaped(t *testing.T) {
 	found := &linear.Issue{
 		Identifier: "SNK-31",
 		Title:      "OWL - have cli also host pure html",
-		BranchName: "snk-31-owl-have-cli-also-host-pure-html",
+		BranchName: "snk-31-DIFFERENT-from-input",
 	}
 
 	tests := []struct {
