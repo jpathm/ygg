@@ -80,7 +80,9 @@ func (c *Client) do(ctx context.Context, query string, vars map[string]any, out 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	raw, err := io.ReadAll(resp.Body)
+	// Bound the read so a misbehaving or malicious endpoint cannot exhaust
+	// memory; no legitimate Linear response is anywhere near this size.
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
@@ -103,13 +105,10 @@ func (c *Client) do(ctx context.Context, query string, vars map[string]any, out 
 	}
 
 	if len(envelope.Errors) > 0 {
-		msg := envelope.Errors[0].Message
-		// Linear reports a missing entity as a GraphQL error rather than a
-		// null field, so it has to be recognised here.
-		if strings.Contains(strings.ToLower(msg), "not found") {
-			return ErrNotFound
-		}
-		return fmt.Errorf("linear: %s", msg)
+		// The "not found" heuristic lives in Issue, not here: do() is shared
+		// by every query, and a team lookup can also fail with a GraphQL
+		// "not found" message that has nothing to do with a missing issue.
+		return fmt.Errorf("linear: %s", envelope.Errors[0].Message)
 	}
 
 	if len(envelope.Data) == 0 {
@@ -128,6 +127,13 @@ func (c *Client) Issue(ctx context.Context, identifier string) (*Issue, error) {
 		Issue *Issue `json:"issue"`
 	}
 	if err := c.do(ctx, issueQuery, map[string]any{"id": identifier}, &data); err != nil {
+		// Linear reports a missing entity as a GraphQL error rather than a
+		// null field, so both are recognised here as ErrNotFound. This
+		// heuristic is scoped to Issue precisely so that it cannot also
+		// swallow an unrelated "not found" error from, say, a team lookup.
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 	if data.Issue == nil {
@@ -148,8 +154,13 @@ const createIssueMutation = `mutation($input: IssueCreateInput!) {
 }`
 
 // teamID resolves a team key such as "SKUNK" to its UUID, which is what
-// issueCreate requires.
+// issueCreate requires. Linear team keys are canonically uppercase, so the
+// key is uppercased before the query: otherwise a config typo like
+// "skunk" fails with a message that looks like a Linear problem rather
+// than a config one.
 func (c *Client) teamID(ctx context.Context, key string) (string, error) {
+	key = strings.ToUpper(key)
+
 	var data struct {
 		Teams struct {
 			Nodes []struct {
@@ -168,7 +179,15 @@ func (c *Client) teamID(ctx context.Context, key string) (string, error) {
 
 // CreateIssue files a new issue on the given team and returns it. State and
 // assignee are left to Linear's defaults.
+//
+// CreateIssue makes two sequential requests (a team lookup, then the
+// mutation), each carried over the client's 10 second HTTP timeout. Both are
+// wrapped in a single 10 second context deadline here so the whole operation
+// honors the budget the client advertises, rather than allowing up to 20s.
 func (c *Client) CreateIssue(ctx context.Context, teamKey, title, desc string) (*Issue, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	teamID, err := c.teamID(ctx, teamKey)
 	if err != nil {
 		return nil, err

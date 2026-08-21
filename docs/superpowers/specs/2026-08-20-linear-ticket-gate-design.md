@@ -34,8 +34,15 @@ Only `ygg new` will change. `ygg list`, `ygg switch`, `ygg remove`, and
 
 ## Non-goals
 
-- Blocking worktree creation. There is no hard gate and no `--no-ticket` flag,
-  because there is nothing to escape from.
+- Blocking worktree creation. There is no hard gate and no `--no-ticket` flag.
+  This is a deliberate tradeoff, not an absence of a reason to want one: with
+  `LINEAR_API_KEY` exported globally — common, since Linear MCP and other
+  tooling use it — every throwaway worktree (a spike, a bisect, checking out
+  someone else's branch to review it) files a real, permanent Linear issue
+  non-interactively. An afternoon of experimentation can leave a trail of
+  unwanted tickets. The design accepts this cost in exchange for the common
+  path staying prompt-free. An opt-out is a cheap follow-up if the cost turns
+  out to bite in practice.
 - Searching Linear for an existing issue that matches the requested name, or
   prompting the user to choose one. Creation is unconditional and
   non-interactive.
@@ -317,4 +324,10 @@ runs `ygg new` rather than when tests run.
   ticket, not that an unlinked worktree is impossible.
 - **Linear's branch name format is a user setting.** The design reads
   `branchName` from the API rather than constructing it, so a user who changes
-  the format in Linear gets branches in the new format automatically.
+  the format in Linear gets branches in the new format automatically. One
+  format, `{user}/{id}-{title}`, produces a worktree at a nested path such as
+  `.worktrees/jeremy/snk-42-x`. `ygg list` derives its displayed name with
+  `filepath.Base`, so it would show `snk-42-x` for a branch actually named
+  `jeremy/snk-42-x` — the display truncates the leading segment. The impact is
+  cosmetic only: `Get` matches a worktree by name or by branch, so `ygg switch`
+  and `ygg remove` still work using the full branch name.

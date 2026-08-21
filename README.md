@@ -110,6 +110,27 @@ ygg new unified-tui
 # ✓ Created worktree at .worktrees/snk-42-unified-tui
 ```
 
+If you rely on a slash naming convention, such as `feat/auth`, note that it is
+not reference-shaped, so it will *not* be preserved — it is treated as a plain
+name and replaced by the Linear-generated branch name above. The only way to
+keep a name of your own choosing is to pass a reference-shaped name (a short
+team key, a number, and an optional slug, e.g. `snk-31-my-name`).
+
+**Running `ygg new` again with the same plain name does not collide with the
+first run.** `ygg new unified-tui` a second time resolves against Linear
+again, creating a *second* Linear issue (say `SNK-43`) and a second worktree
+at `.worktrees/snk-43-unified-tui` — the collision check only ever sees the
+freshly resolved path, which is new every time. To resume work you already
+linked, pass the branch name Linear gave you the first time (e.g.
+`ygg new snk-42-unified-tui`), which is reference-shaped and will not create
+another issue.
+
+Relatedly, the Linear issue is created before the worktree is. If worktree
+creation then fails, or the command is interrupted in between, the issue has
+already been filed and is now orphaned: `ygg remove` has no notion of a
+worktree's linked issue and will not close it. Cleaning up an orphaned issue
+is a manual step in Linear.
+
 ### Setup
 
 Export a Linear personal API key, created under Settings → API in Linear:

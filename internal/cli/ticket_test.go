@@ -21,6 +21,7 @@ type fakeIssues struct {
 
 	createdTitle string
 	createdTeam  string
+	createdDesc  string
 }
 
 func (f *fakeIssues) Issue(ctx context.Context, identifier string) (*linear.Issue, error) {
@@ -30,6 +31,7 @@ func (f *fakeIssues) Issue(ctx context.Context, identifier string) (*linear.Issu
 func (f *fakeIssues) CreateIssue(ctx context.Context, teamKey, title, desc string) (*linear.Issue, error) {
 	f.createdTeam = teamKey
 	f.createdTitle = title
+	f.createdDesc = desc
 	return f.created, f.createErr
 }
 
@@ -188,6 +190,21 @@ func TestResolveNamePlain(t *testing.T) {
 			wantBranch: "unified-tui",
 			wantNote:   "Could not create Linear issue: boom — unlinked",
 		},
+		{
+			// If Linear ever returned success with an empty branch name,
+			// Create("") would resolve to the .worktrees directory itself,
+			// which already exists, breaking the never-fail guarantee.
+			// resolveName must fall back to the requested name.
+			name: "created with empty branch name falls back to requested name",
+			svc: &fakeIssues{created: &linear.Issue{
+				Identifier: "SNK-42",
+				URL:        "https://linear.app/gridkit/issue/SNK-42/unified-tui",
+				BranchName: "",
+			}},
+			team:       "SKUNK",
+			wantBranch: "unified-tui",
+			wantNote:   "Created SNK-42 — https://linear.app/gridkit/issue/SNK-42/unified-tui",
+		},
 	}
 
 	for _, tt := range tests {
@@ -203,6 +220,21 @@ func TestResolveNamePlain(t *testing.T) {
 	}
 }
 
+// TestResolveNameNoOriginRemote guards the empty-repo special case: without
+// this, "No Linear team mapped for  — unlinked" would render with a double
+// space and no repo name, which reads like a bug rather than "you have no
+// origin remote".
+func TestResolveNameNoOriginRemote(t *testing.T) {
+	branch, note := resolveName(context.Background(), &fakeIssues{}, "", "", "unified-tui")
+	if branch != "unified-tui" {
+		t.Errorf("branch = %q, want %q", branch, "unified-tui")
+	}
+	const want = "No origin remote — unlinked"
+	if note != want {
+		t.Errorf("note = %q, want %q", note, want)
+	}
+}
+
 func TestResolveNamePassesTitleAndTeam(t *testing.T) {
 	f := &fakeIssues{created: &linear.Issue{Identifier: "SNK-42", BranchName: "snk-42-unified-tui"}}
 	resolveName(context.Background(), f, "SKUNK", "GridKitLLC/otter-tools", "unified-tui")
@@ -211,6 +243,12 @@ func TestResolveNamePassesTitleAndTeam(t *testing.T) {
 	}
 	if f.createdTitle != "Unified tui" {
 		t.Errorf("title = %q, want %q", f.createdTitle, "Unified tui")
+	}
+	// repo reaches Linear only through the description, so it is the one
+	// place this assertion can catch a regression there.
+	const wantDesc = "Created by ygg for GridKitLLC/otter-tools."
+	if f.createdDesc != wantDesc {
+		t.Errorf("desc = %q, want %q", f.createdDesc, wantDesc)
 	}
 }
 

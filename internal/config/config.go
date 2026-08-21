@@ -86,6 +86,11 @@ func NormalizeRemote(remote string) string {
 // TeamFor returns the Linear team key for a remote URL, preferring an exact
 // per-repository entry and falling back to DefaultTeam. It returns "" when
 // neither is configured.
+//
+// An explicit but empty entry, such as `"owner/repo": ""`, is treated as
+// absent and falls back to DefaultTeam the same as an unmapped repository.
+// There is currently no way to write a per-repository entry that excludes a
+// repository from Linear entirely when a DefaultTeam is set.
 func (c Config) TeamFor(remote string) string {
 	if team, ok := c.Linear.Teams[NormalizeRemote(remote)]; ok && team != "" {
 		return team

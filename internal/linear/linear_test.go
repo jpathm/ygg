@@ -2,7 +2,9 @@ package linear
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -150,8 +152,43 @@ func respondInOrder(t *testing.T, bodies ...string) http.HandlerFunc {
 	}
 }
 
+// capturedRequest is a decoded GraphQL request body, kept for assertions on
+// exactly what a handler received.
+type capturedRequest struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables"`
+}
+
+// respondCapturing behaves like respondInOrder, but also decodes each
+// request's body into *captured, in order, so a test can assert on what was
+// actually sent rather than only on the client's return value.
+func respondCapturing(t *testing.T, captured *[]capturedRequest, bodies ...string) http.HandlerFunc {
+	t.Helper()
+	var n int
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		var req capturedRequest
+		if err := json.Unmarshal(data, &req); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		*captured = append(*captured, req)
+
+		if n >= len(bodies) {
+			t.Errorf("unexpected request %d", n+1)
+			w.WriteHeader(500)
+			return
+		}
+		_, _ = w.Write([]byte(bodies[n]))
+		n++
+	}
+}
+
 func TestCreateIssue(t *testing.T) {
-	c := newTestClient(t, respondInOrder(t,
+	var reqs []capturedRequest
+	c := newTestClient(t, respondCapturing(t, &reqs,
 		`{"data":{"teams":{"nodes":[{"id":"team-uuid"}]}}}`,
 		`{"data":{"issueCreate":{"success":true,"issue":{
 			"identifier":"SNK-42",
@@ -169,6 +206,66 @@ func TestCreateIssue(t *testing.T) {
 	}
 	if issue.BranchName != "snk-42-unified-tui" {
 		t.Errorf("BranchName = %q, want snk-42-unified-tui", issue.BranchName)
+	}
+
+	// The team lookup exists to translate a human key into the UUID the
+	// mutation requires. Assert the mutation actually received that UUID
+	// ("team-uuid", from the first response) rather than the raw team key
+	// ("SKUNK") — a bug that skipped the translation would otherwise pass
+	// every assertion above.
+	if len(reqs) != 2 {
+		t.Fatalf("got %d requests, want 2", len(reqs))
+	}
+	input, ok := reqs[1].Variables["input"].(map[string]any)
+	if !ok {
+		t.Fatalf("second request variables[\"input\"] = %#v, want a map", reqs[1].Variables["input"])
+	}
+	if got := input["teamId"]; got != "team-uuid" {
+		t.Errorf("variables.input.teamId = %v, want %q", got, "team-uuid")
+	}
+}
+
+// TestCreateIssueLowercaseTeamKeyResolves guards against a config typo like
+// "skunk" (Linear team keys are canonically uppercase) failing with a
+// message that looks like a Linear problem rather than a config one.
+func TestCreateIssueLowercaseTeamKeyResolves(t *testing.T) {
+	var reqs []capturedRequest
+	c := newTestClient(t, respondCapturing(t, &reqs,
+		`{"data":{"teams":{"nodes":[{"id":"team-uuid"}]}}}`,
+		`{"data":{"issueCreate":{"success":true,"issue":{
+			"identifier":"SNK-42",
+			"title":"x",
+			"branchName":"snk-42-x",
+			"url":"https://linear.app/gridkit/issue/SNK-42/x"}}}}`,
+	))
+
+	if _, err := c.CreateIssue(context.Background(), "skunk", "x", "y"); err != nil {
+		t.Fatalf("CreateIssue() error = %v", err)
+	}
+
+	if len(reqs) == 0 {
+		t.Fatal("no requests captured")
+	}
+	if got := reqs[0].Variables["key"]; got != "SKUNK" {
+		t.Errorf("team query key = %v, want %q (uppercased)", got, "SKUNK")
+	}
+}
+
+// TestCreateIssueTeamNotFoundIsNotErrNotFound guards the fix that moved the
+// "not found" heuristic out of do() and into Issue(): a GraphQL "not found"
+// error raised by the team lookup must not become ErrNotFound, because
+// ErrNotFound is unhandled on the create path and would print a message
+// naming the wrong entity ("issue not found" for a missing team).
+func TestCreateIssueTeamNotFoundIsNotErrNotFound(t *testing.T) {
+	c := newTestClient(t, respondInOrder(t,
+		`{"errors":[{"message":"Entity not found: Team"}]}`,
+	))
+	_, err := c.CreateIssue(context.Background(), "NOPE", "x", "y")
+	if err == nil {
+		t.Fatal("CreateIssue() error = nil, want an error")
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Errorf("CreateIssue() error = %v, wrongly became ErrNotFound", err)
 	}
 }
 

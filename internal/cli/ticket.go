@@ -85,6 +85,9 @@ func resolveName(ctx context.Context, svc issueService, team, repo, name string)
 	case svc == nil:
 		return name, "No LINEAR_API_KEY set — worktree will be unlinked"
 	case team == "":
+		if repo == "" {
+			return name, "No origin remote — unlinked"
+		}
 		return name, fmt.Sprintf("No Linear team mapped for %s — unlinked", repo)
 	}
 
@@ -98,7 +101,18 @@ func resolveName(ctx context.Context, svc issueService, team, repo, name string)
 	case err != nil:
 		return name, fmt.Sprintf("Could not create Linear issue: %v — unlinked", err)
 	}
-	return issue.BranchName, fmt.Sprintf("Created %s — %s", issue.Identifier, issue.URL)
+	// A successful creation should always carry a branch name, but guard
+	// against an empty one anyway: Create("") resolves to the .worktrees
+	// directory itself, which already exists, so ygg new would fail with a
+	// confusing "worktree  already exists" error instead of ever creating
+	// one — the one hole in the never-fail guarantee. Falling back to the
+	// requested name keeps that guarantee intact while still reporting the
+	// issue that was created.
+	branch = issue.BranchName
+	if branch == "" {
+		branch = name
+	}
+	return branch, fmt.Sprintf("Created %s — %s", issue.Identifier, issue.URL)
 }
 
 // resolveTicket resolves the requested worktree name against Linear and prints
@@ -114,6 +128,7 @@ func resolveTicket(ctx context.Context, wm *worktree.Manager, name string) strin
 	}
 
 	remote := wm.RemoteURL()
+	repo := config.NormalizeRemote(remote)
 
 	// A nil issueService means "no API key configured". Leaving svc as a nil
 	// interface (rather than a typed nil pointer) is what makes the nil check
@@ -123,7 +138,16 @@ func resolveTicket(ctx context.Context, wm *worktree.Manager, name string) strin
 		svc = linear.NewClient(key)
 	}
 
-	branch, note := resolveName(ctx, svc, cfg.TeamFor(remote), config.NormalizeRemote(remote), name)
+	// cfg.TeamFor normalizes remote internally, so this re-derives the same
+	// value as repo above — a redundant parse, not a redundant network call.
+	// Avoiding it would mean giving TeamFor a variant that accepts an
+	// already-normalized repo, which is a config API change out of scope
+	// here, so it is left as is.
+	branch, note := resolveName(ctx, svc, cfg.TeamFor(remote), repo, name)
+	// Every path through resolveName returns a non-empty note, so this guard
+	// is currently dead. Kept anyway as cheap defensive coding: it costs
+	// nothing and prevents a blank info() line if a future resolveName path
+	// ever returns "".
 	if note != "" {
 		info("%s", note)
 	}
