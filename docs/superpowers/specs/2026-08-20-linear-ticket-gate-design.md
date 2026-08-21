@@ -120,12 +120,17 @@ the `Authorization` header, without a `Bearer` prefix. Two documents are needed:
 A GraphQL client library would be larger than the two documents it would carry,
 so the request and response types will be hand-written.
 
-`Issue` will return a sentinel `ErrNotFound` when Linear responds with no issue,
-and a distinguishable `ErrUnauthorized` on HTTP 401 or 403. Every other failure —
-transport error, timeout, non-2xx status, `errors` array in the response body,
-undecodable body — will be returned as a wrapped error. The distinction between
-"not found", "unauthorized", and "everything else" is the minimum needed to write
-the three different warnings that matter.
+The client will expose three sentinel errors, because the message tables below
+need to tell exactly three failure kinds apart:
+
+- `ErrNotFound` — Linear has no such issue. Linear reports a missing entity as a
+  GraphQL `errors` entry rather than a null field, so the client must recognize
+  that message as well as a null result.
+- `ErrUnauthorized` — HTTP 401 or 403.
+- `ErrUnreachable` — transport failure, timeout, or non-2xx status.
+
+Every other failure, including a GraphQL `errors` payload and an undecodable
+body, is returned as an ordinary wrapped error and reported verbatim.
 
 The HTTP client will carry a 10 second timeout. An unreachable Linear must
 degrade quickly rather than stall worktree creation.
@@ -197,8 +202,12 @@ An unset key behaves exactly like an outage: a warning, and an unlinked worktree
 `internal/cli/new.go` will gain one helper:
 
 ```go
-func resolveName(ctx context.Context, svc issueService, cfg Config, remote, name string) (branch, note string)
+func resolveName(ctx context.Context, svc issueService, team, repo, name string) (branch, note string)
 ```
+
+`team` is the already-resolved Linear team key and `repo` the already-normalized
+`owner/repo`, so `internal/cli` does not depend on the configuration type and the
+function stays trivially testable.
 
 It returns no error. Warn-and-proceed is the entire policy of this feature, and
 encoding it in the signature makes it structurally impossible for a later change
@@ -242,6 +251,7 @@ it most likely is linked — ygg simply could not check.
 | `LINEAR_API_KEY` unset | `No LINEAR_API_KEY set — SNK-31 not verified` |
 | Linear unreachable, timeout, or 5xx | `Could not reach Linear — SNK-31 not verified` |
 | HTTP 401 or 403 | `Linear rejected the API key — SNK-31 not verified` |
+| Any other error | `Could not verify SNK-31: <err>` |
 
 When the requested name is a plain name, ygg is the party responsible for
 producing a ticket, so any failure genuinely does leave the worktree unlinked.
@@ -275,8 +285,9 @@ add no test dependencies.
 
 - **`internal/linear`:** exercised against an `httptest.Server` returning canned
   responses — a successful issue, a successful creation, a GraphQL `errors`
-  payload, HTTP 401, an undecodable body, and a timeout. These pin the mapping
-  from wire responses onto `ErrNotFound`, `ErrUnauthorized`, and wrapped errors.
+  payload, HTTP 401, HTTP 500, an undecodable body, and a refused connection.
+  These pin the mapping from wire responses onto `ErrNotFound`,
+  `ErrUnauthorized`, `ErrUnreachable`, and wrapped errors.
 - **`resolveName`:** one case per row of the message table, driven by a fake
   `issueService`. This table is the specification of the feature's policy and is
   the test that matters most.
