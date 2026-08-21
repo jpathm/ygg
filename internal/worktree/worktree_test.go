@@ -363,3 +363,30 @@ func TestCreateChecksOutExistingBranch(t *testing.T) {
 		t.Errorf("wt.Base = %q, want empty for existing-branch checkout", wt.Base)
 	}
 }
+
+func TestRemoteURL(t *testing.T) {
+	dir := t.TempDir()
+	gitOut(t, dir, "init", "-q")
+	gitOut(t, dir, "remote", "add", "origin", "https://github.com/GridKitLLC/ygg.git")
+
+	m, err := NewManager(dir)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	if got := m.RemoteURL(); got != "https://github.com/GridKitLLC/ygg.git" {
+		t.Errorf("RemoteURL() = %q", got)
+	}
+}
+
+func TestRemoteURLWithoutOrigin(t *testing.T) {
+	dir := t.TempDir()
+	gitOut(t, dir, "init", "-q")
+
+	m, err := NewManager(dir)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	if got := m.RemoteURL(); got != "" {
+		t.Errorf("RemoteURL() = %q, want empty", got)
+	}
+}

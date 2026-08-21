@@ -172,6 +172,18 @@ func (m *Manager) HasUncommittedChanges(path string) bool {
 	return len(strings.TrimSpace(string(output))) > 0
 }
 
+// RemoteURL returns the URL of the origin remote, or "" when the repository
+// has no origin. A missing remote is an ordinary case rather than a failure.
+func (m *Manager) RemoteURL() string {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = m.repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
 // Create creates a new worktree with the given name, based on the default branch.
 func (m *Manager) Create(name string) (*Worktree, error) {
 	if err := os.MkdirAll(m.baseDir, 0755); err != nil {
