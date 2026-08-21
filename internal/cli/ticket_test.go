@@ -3,10 +3,13 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/joch/ygg/internal/linear"
+	"github.com/joch/ygg/internal/worktree"
 )
 
 // fakeIssues is a stub issueService returning canned results.
@@ -216,5 +219,75 @@ func TestNewCmdLongDescribesLinear(t *testing.T) {
 		if !strings.Contains(newCmd.Long, want) {
 			t.Errorf("newCmd.Long does not mention %q", want)
 		}
+	}
+}
+
+// newTestRepoManager builds a bare git repository in a temp dir, optionally
+// with an origin remote, and returns a worktree.Manager rooted at it.
+func newTestRepoManager(t *testing.T, origin string) *worktree.Manager {
+	t.Helper()
+	dir := t.TempDir()
+	runRemovalGit(t, dir, "init", "-q")
+	if origin != "" {
+		runRemovalGit(t, dir, "remote", "add", "origin", origin)
+	}
+	wm, err := worktree.NewManager(dir)
+	if err != nil {
+		t.Fatalf("worktree.NewManager() error = %v", err)
+	}
+	return wm
+}
+
+// TestResolveTicketWithoutAPIKeyReturnsRequestedName guards the nil-interface
+// pattern in resolveTicket: svc must stay a nil issueService, not a typed nil
+// *linear.Client, when LINEAR_API_KEY is unset. A typed nil would make
+// resolveName's `svc == nil` check false and dereference the nil pointer,
+// panicking instead of returning cleanly.
+func TestResolveTicketWithoutAPIKeyReturnsRequestedName(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	wm := newTestRepoManager(t, "https://github.com/GridKitLLC/ygg.git")
+
+	const name = "some-feature"
+	got := resolveTicket(context.Background(), wm, name)
+	if got != name {
+		t.Errorf("resolveTicket() = %q, want %q", got, name)
+	}
+}
+
+// TestResolveTicketMalformedConfigDegradesToUnlinked confirms that a config
+// parse error is reported and then treated as a zero Config, not propagated
+// as a failure that would block worktree creation.
+func TestResolveTicketMalformedConfigDegradesToUnlinked(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "ygg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ygg", "config.json"), []byte(`{"linear":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wm := newTestRepoManager(t, "https://github.com/GridKitLLC/ygg.git")
+
+	const name = "some-feature"
+	got := resolveTicket(context.Background(), wm, name)
+	if got != name {
+		t.Errorf("resolveTicket() = %q, want %q", got, name)
+	}
+}
+
+// TestResolveTicketNoOriginReturnsRequestedName confirms a repository with no
+// origin remote (RemoteURL returns "") does not panic and still yields the
+// requested name unchanged.
+func TestResolveTicketNoOriginReturnsRequestedName(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	wm := newTestRepoManager(t, "")
+
+	const name = "some-feature"
+	got := resolveTicket(context.Background(), wm, name)
+	if got != name {
+		t.Errorf("resolveTicket() = %q, want %q", got, name)
 	}
 }
