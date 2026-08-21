@@ -135,3 +135,61 @@ func (c *Client) Issue(ctx context.Context, identifier string) (*Issue, error) {
 	}
 	return data.Issue, nil
 }
+
+const teamQuery = `query($key: String!) {
+  teams(filter: {key: {eq: $key}}, first: 1) { nodes { id } }
+}`
+
+const createIssueMutation = `mutation($input: IssueCreateInput!) {
+  issueCreate(input: $input) {
+    success
+    issue { identifier title branchName url }
+  }
+}`
+
+// teamID resolves a team key such as "SKUNK" to its UUID, which is what
+// issueCreate requires.
+func (c *Client) teamID(ctx context.Context, key string) (string, error) {
+	var data struct {
+		Teams struct {
+			Nodes []struct {
+				ID string `json:"id"`
+			} `json:"nodes"`
+		} `json:"teams"`
+	}
+	if err := c.do(ctx, teamQuery, map[string]any{"key": key}, &data); err != nil {
+		return "", err
+	}
+	if len(data.Teams.Nodes) == 0 {
+		return "", fmt.Errorf("linear: no team with key %q", key)
+	}
+	return data.Teams.Nodes[0].ID, nil
+}
+
+// CreateIssue files a new issue on the given team and returns it. State and
+// assignee are left to Linear's defaults.
+func (c *Client) CreateIssue(ctx context.Context, teamKey, title, desc string) (*Issue, error) {
+	teamID, err := c.teamID(ctx, teamKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var data struct {
+		IssueCreate struct {
+			Success bool   `json:"success"`
+			Issue   *Issue `json:"issue"`
+		} `json:"issueCreate"`
+	}
+	input := map[string]any{
+		"teamId":      teamID,
+		"title":       title,
+		"description": desc,
+	}
+	if err := c.do(ctx, createIssueMutation, map[string]any{"input": input}, &data); err != nil {
+		return nil, err
+	}
+	if !data.IssueCreate.Success || data.IssueCreate.Issue == nil {
+		return nil, fmt.Errorf("linear: issue creation did not succeed")
+	}
+	return data.IssueCreate.Issue, nil
+}

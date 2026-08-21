@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -131,5 +132,75 @@ func TestIssueUndecodableBody(t *testing.T) {
 	})
 	if _, err := c.Issue(context.Background(), "SNK-31"); err == nil {
 		t.Fatal("Issue() error = nil, want a decode error")
+	}
+}
+
+// respondInOrder returns each body in sequence, one per request.
+func respondInOrder(t *testing.T, bodies ...string) http.HandlerFunc {
+	t.Helper()
+	var n int
+	return func(w http.ResponseWriter, r *http.Request) {
+		if n >= len(bodies) {
+			t.Errorf("unexpected request %d", n+1)
+			w.WriteHeader(500)
+			return
+		}
+		_, _ = w.Write([]byte(bodies[n]))
+		n++
+	}
+}
+
+func TestCreateIssue(t *testing.T) {
+	c := newTestClient(t, respondInOrder(t,
+		`{"data":{"teams":{"nodes":[{"id":"team-uuid"}]}}}`,
+		`{"data":{"issueCreate":{"success":true,"issue":{
+			"identifier":"SNK-42",
+			"title":"Unified tui",
+			"branchName":"snk-42-unified-tui",
+			"url":"https://linear.app/gridkit/issue/SNK-42/unified-tui"}}}}`,
+	))
+
+	issue, err := c.CreateIssue(context.Background(), "SKUNK", "Unified tui", "Created by ygg.")
+	if err != nil {
+		t.Fatalf("CreateIssue() error = %v", err)
+	}
+	if issue.Identifier != "SNK-42" {
+		t.Errorf("Identifier = %q, want SNK-42", issue.Identifier)
+	}
+	if issue.BranchName != "snk-42-unified-tui" {
+		t.Errorf("BranchName = %q, want snk-42-unified-tui", issue.BranchName)
+	}
+}
+
+func TestCreateIssueUnknownTeam(t *testing.T) {
+	c := newTestClient(t, respondInOrder(t,
+		`{"data":{"teams":{"nodes":[]}}}`,
+	))
+	_, err := c.CreateIssue(context.Background(), "NOPE", "x", "y")
+	if err == nil {
+		t.Fatal("CreateIssue() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "NOPE") {
+		t.Errorf("error = %v, want it to name the team key", err)
+	}
+}
+
+func TestCreateIssueUnauthorizedPropagates(t *testing.T) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(401)
+	})
+	_, err := c.CreateIssue(context.Background(), "SKUNK", "x", "y")
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("error = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestCreateIssueUnsuccessful(t *testing.T) {
+	c := newTestClient(t, respondInOrder(t,
+		`{"data":{"teams":{"nodes":[{"id":"team-uuid"}]}}}`,
+		`{"data":{"issueCreate":{"success":false,"issue":null}}}`,
+	))
+	if _, err := c.CreateIssue(context.Background(), "SKUNK", "x", "y"); err == nil {
+		t.Fatal("CreateIssue() error = nil, want an error")
 	}
 }
